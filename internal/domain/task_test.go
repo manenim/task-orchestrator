@@ -11,24 +11,20 @@ func TestTaskLifecycle(t *testing.T) {
 		t.Errorf("expected Pending, got %v", task.State)
 	}
 
-	// 1. Pending -> Scheduled
 	err := task.UpdateState(Scheduled)
 	if err != nil {
 		t.Fatalf("unexpected error transition to Scheduled: %v", err)
 	}
 
-	// 2. Scheduled -> Running
 	errRun := task.UpdateState(Running)
 	if errRun != nil {
 		t.Fatalf("unexpected error transition to Running: %v", errRun)
 	}
 
-	// 3. Running -> Completed
 	if err := task.UpdateState(Completed); err != nil {
 		t.Fatalf("unexpected error transition to Completed: %v", err)
 	}
 
-	// 4. Verify Terminal State (Completed -> Failed SHOULD ERROR)
 	if err := task.UpdateState(Failed); err != ErrTaskFinalized {
 		t.Errorf("expected ErrTaskFinalized when trying to fail a completed task, got: %v", err)
 	}
@@ -68,7 +64,6 @@ func TestTask_RetryLogic(t *testing.T) {
 		UpdatedAt: time.Now(),
 	}
 
-	// Running -> Pending is VALID (Retry)
 	err := task.ValidateTransition(Pending)
 
 	if err != nil {

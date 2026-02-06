@@ -1,0 +1,58 @@
+syntax = "proto3";
+
+package api.v1;
+
+option go_package = "github.com/manenim/task-orchestrator/pkg/api/v1";
+
+service Orchestrator {
+    rpc SubmitTask (SubmitTaskRequest) returns (SubmitTaskResponse);
+
+    rpc RegisterWorker (RegisterWorkerRequest) returns (RegisterWorkerResponse);
+
+    rpc StreamTasks (StreamTasksRequest) returns (stream TaskEvent);
+
+    rpc CompleteTask (CompleteTaskRequest) returns (CompleteTaskResponse);
+}
+
+// MESSAGES --------------------------------------------------------------------
+
+message SubmitTaskRequest {
+    string task_id = 1; 
+    string type = 2;        
+    bytes payload = 3;      
+    string client_id = 4;  
+}
+
+message SubmitTaskResponse {
+    string task_id = 1;    
+}
+
+message RegisterWorkerRequest {
+    string worker_id = 1;
+    repeated string capabilities = 2; 
+}
+
+message RegisterWorkerResponse {
+    bool success = 1;
+}
+
+message StreamTasksRequest {
+    string worker_id = 1; 
+}
+
+message TaskEvent {
+    string task_id = 1;
+    string job_type = 2;
+    bytes payload = 3;
+}
+
+message CompleteTaskRequest {
+    string task_id = 1;
+    string worker_id = 2; 
+    string error_message = 3; 
+    bytes result = 4;
+}
+
+message CompleteTaskResponse {
+    bool stop_stream = 1;
+}
