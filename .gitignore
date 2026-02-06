@@ -1,0 +1,13 @@
+# Binaries
+/bin
+/dist
+
+# IDEs
+.vscode
+.idea
+
+# OS
+.DS_Store
+
+# Documentation artifacts (Explainer mode)
+explainer/
