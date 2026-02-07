@@ -17,9 +17,9 @@ func TestInMemoryTaskRepository_ListEligible(t *testing.T) {
 	past := now.Add(-1 * time.Hour)
 
 	tasks := []*domain.Task{
-		domain.NewTask("1", "immediate", nil, past),   
-		domain.NewTask("2", "future", nil, future),   
-		domain.NewTask("3", "immediate_2", nil, past), 
+		domain.NewTask("1", "immediate", nil, past),
+		domain.NewTask("2", "future", nil, future),
+		domain.NewTask("3", "immediate_2", nil, past),
 	}
 
 	tasks[2].State = domain.Completed
@@ -37,9 +37,9 @@ func TestInMemoryTaskRepository_ListEligible(t *testing.T) {
 
 	if len(eligible) != 1 {
 		t.Errorf("expected 1 eligible task (Task 1), got %d", len(eligible))
-        for _, et := range eligible {
-            t.Logf("Got eligible task: %s (State: %s, RunAt: %s)", et.ID, et.State, et.RunAt)
-        }
+		for _, et := range eligible {
+			t.Logf("Got eligible task: %s (State: %s, RunAt: %s)", et.ID, et.State, et.RunAt)
+		}
 	}
 
 	if len(eligible) > 0 && eligible[0].ID != "1" {

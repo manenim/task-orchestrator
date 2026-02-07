@@ -19,7 +19,7 @@ type Task struct {
 	Type      string
 	Payload   []byte
 	State     TaskState
-	RunAt     time.Time 
+	RunAt     time.Time
 	Version   int
 	CreatedAt time.Time
 	UpdatedAt time.Time

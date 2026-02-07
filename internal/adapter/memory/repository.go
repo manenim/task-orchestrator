@@ -8,6 +8,7 @@ import (
 
 	"github.com/manenim/task-orchestrator/internal/domain"
 )
+
 type InMemoryTaskRepository struct {
 	mu    sync.RWMutex
 	store map[string]*domain.Task
@@ -33,7 +34,7 @@ func (r *InMemoryTaskRepository) ListEligible(ctx context.Context, now time.Time
 	defer r.mu.RUnlock()
 
 	var tasks []*domain.Task
-	
+
 	for _, t := range r.store {
 		if t.State == domain.Pending && (t.RunAt.Before(now) || t.RunAt.Equal(now)) {
 			tasks = append(tasks, t)
@@ -49,7 +50,7 @@ func (r *InMemoryTaskRepository) Get(ctx context.Context, id string) (*domain.Ta
 	defer r.mu.RUnlock()
 	task, exists := r.store[id]
 	if !exists {
-		return nil, domain.ErrTaskNotFound 
+		return nil, domain.ErrTaskNotFound
 	}
 	return task, nil
 }

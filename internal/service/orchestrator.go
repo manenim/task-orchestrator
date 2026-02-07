@@ -12,14 +12,16 @@ import (
 )
 
 type Orchestrator struct {
-    pb.UnimplementedOrchestratorServer
-    repo port.TaskRepository
+	pb.UnimplementedOrchestratorServer
+	repo   port.TaskRepository
+	logger port.Logger
 }
 
-func New(repo port.TaskRepository) *Orchestrator {
-    return &Orchestrator{
-        repo: repo,
-    }
+func New(repo port.TaskRepository, logger port.Logger) *Orchestrator {
+	return &Orchestrator{
+		repo:   repo,
+		logger: logger,
+	}
 }
 
 func (s *Orchestrator) SubmitTask(ctx context.Context, req *pb.SubmitTaskRequest) (*pb.SubmitTaskResponse, error) {
@@ -30,18 +32,19 @@ func (s *Orchestrator) SubmitTask(ctx context.Context, req *pb.SubmitTaskRequest
 		return nil, status.Error(codes.InvalidArgument, "Task ID cannot be empty (client must generate ID for idempotency)")
 	}
 
-    var runAt time.Time
-    if req.RunAt != nil {
-        runAt = req.RunAt.AsTime()
-    }
+	var runAt time.Time
+	if req.RunAt != nil {
+		runAt = req.RunAt.AsTime()
+	}
 
-    task := domain.NewTask(req.TaskId, req.Type, req.Payload, runAt)
+	task := domain.NewTask(req.TaskId, req.Type, req.Payload, runAt)
 
-    if err := s.repo.Create(ctx, task); err != nil {
-        return nil, err
-    }
+	if err := s.repo.Create(ctx, task); err != nil {
+		return nil, err
+	}
+	s.logger.Info("Task Submitted", port.String("id", task.ID))
 
-    return &pb.SubmitTaskResponse{
-        TaskId: task.ID,
-    }, nil
+	return &pb.SubmitTaskResponse{
+		TaskId: task.ID,
+	}, nil
 }
