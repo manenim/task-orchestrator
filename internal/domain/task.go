@@ -19,22 +19,26 @@ type Task struct {
 	Type      string
 	Payload   []byte
 	State     TaskState
+	RunAt     time.Time 
 	Version   int
 	CreatedAt time.Time
 	UpdatedAt time.Time
 }
 
-func NewTask(id string, taskType string, payload []byte) *Task {
-	Task := &Task{
+func NewTask(id string, taskType string, payload []byte, runAt time.Time) *Task {
+	if runAt.IsZero() {
+		runAt = time.Now().UTC()
+	}
+	return &Task{
 		ID:        id,
 		Type:      taskType,
 		Payload:   payload,
 		State:     Pending,
+		RunAt:     runAt,
 		Version:   1,
 		CreatedAt: time.Now().UTC(),
 		UpdatedAt: time.Now().UTC(),
 	}
-	return Task
 }
 
 func (t *Task) ValidateTransition(target TaskState) error {

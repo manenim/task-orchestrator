@@ -6,7 +6,7 @@ import (
 )
 
 func TestTaskLifecycle(t *testing.T) {
-	task := NewTask("123", "email", nil)
+	task := NewTask("123", "email", nil, time.Time{})
 	if task.State != Pending {
 		t.Errorf("expected Pending, got %v", task.State)
 	}
@@ -43,7 +43,7 @@ func TestTask_IllegalTransitions(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			task := NewTask("1", "type", nil)
+			task := NewTask("1", "type", nil, time.Time{})
 			task.State = tt.start
 			got := task.ValidateTransition(tt.end)
 			if got != tt.want {
