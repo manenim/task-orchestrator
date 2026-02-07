@@ -4,6 +4,8 @@ package api.v1;
 
 option go_package = "github.com/manenim/task-orchestrator/pkg/api/v1";
 
+import "google/protobuf/timestamp.proto";
+
 service Orchestrator {
     rpc SubmitTask (SubmitTaskRequest) returns (SubmitTaskResponse);
 
@@ -21,6 +23,7 @@ message SubmitTaskRequest {
     string type = 2;        
     bytes payload = 3;      
     string client_id = 4;  
+    google.protobuf.Timestamp run_at = 5; 
 }
 
 message SubmitTaskResponse {

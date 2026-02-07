@@ -9,6 +9,7 @@ package v1
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
@@ -27,6 +28,7 @@ type SubmitTaskRequest struct {
 	Type          string                 `protobuf:"bytes,2,opt,name=type,proto3" json:"type,omitempty"`
 	Payload       []byte                 `protobuf:"bytes,3,opt,name=payload,proto3" json:"payload,omitempty"`
 	ClientId      string                 `protobuf:"bytes,4,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
+	RunAt         *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=run_at,json=runAt,proto3" json:"run_at,omitempty"` // Scheduled execution time
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -87,6 +89,13 @@ func (x *SubmitTaskRequest) GetClientId() string {
 		return x.ClientId
 	}
 	return ""
+}
+
+func (x *SubmitTaskRequest) GetRunAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.RunAt
+	}
+	return nil
 }
 
 type SubmitTaskResponse struct {
@@ -449,12 +458,13 @@ var File_api_proto_v1_orchestrator_proto protoreflect.FileDescriptor
 
 const file_api_proto_v1_orchestrator_proto_rawDesc = "" +
 	"\n" +
-	"\x1fapi/proto/v1/orchestrator.proto\x12\x06api.v1\"w\n" +
+	"\x1fapi/proto/v1/orchestrator.proto\x12\x06api.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xaa\x01\n" +
 	"\x11SubmitTaskRequest\x12\x17\n" +
 	"\atask_id\x18\x01 \x01(\tR\x06taskId\x12\x12\n" +
 	"\x04type\x18\x02 \x01(\tR\x04type\x12\x18\n" +
 	"\apayload\x18\x03 \x01(\fR\apayload\x12\x1b\n" +
-	"\tclient_id\x18\x04 \x01(\tR\bclientId\"-\n" +
+	"\tclient_id\x18\x04 \x01(\tR\bclientId\x121\n" +
+	"\x06run_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\x05runAt\"-\n" +
 	"\x12SubmitTaskResponse\x12\x17\n" +
 	"\atask_id\x18\x01 \x01(\tR\x06taskId\"X\n" +
 	"\x15RegisterWorkerRequest\x12\x1b\n" +
@@ -505,21 +515,23 @@ var file_api_proto_v1_orchestrator_proto_goTypes = []any{
 	(*TaskEvent)(nil),              // 5: api.v1.TaskEvent
 	(*CompleteTaskRequest)(nil),    // 6: api.v1.CompleteTaskRequest
 	(*CompleteTaskResponse)(nil),   // 7: api.v1.CompleteTaskResponse
+	(*timestamppb.Timestamp)(nil),  // 8: google.protobuf.Timestamp
 }
 var file_api_proto_v1_orchestrator_proto_depIdxs = []int32{
-	0, // 0: api.v1.Orchestrator.SubmitTask:input_type -> api.v1.SubmitTaskRequest
-	2, // 1: api.v1.Orchestrator.RegisterWorker:input_type -> api.v1.RegisterWorkerRequest
-	4, // 2: api.v1.Orchestrator.StreamTasks:input_type -> api.v1.StreamTasksRequest
-	6, // 3: api.v1.Orchestrator.CompleteTask:input_type -> api.v1.CompleteTaskRequest
-	1, // 4: api.v1.Orchestrator.SubmitTask:output_type -> api.v1.SubmitTaskResponse
-	3, // 5: api.v1.Orchestrator.RegisterWorker:output_type -> api.v1.RegisterWorkerResponse
-	5, // 6: api.v1.Orchestrator.StreamTasks:output_type -> api.v1.TaskEvent
-	7, // 7: api.v1.Orchestrator.CompleteTask:output_type -> api.v1.CompleteTaskResponse
-	4, // [4:8] is the sub-list for method output_type
-	0, // [0:4] is the sub-list for method input_type
-	0, // [0:0] is the sub-list for extension type_name
-	0, // [0:0] is the sub-list for extension extendee
-	0, // [0:0] is the sub-list for field type_name
+	8, // 0: api.v1.SubmitTaskRequest.run_at:type_name -> google.protobuf.Timestamp
+	0, // 1: api.v1.Orchestrator.SubmitTask:input_type -> api.v1.SubmitTaskRequest
+	2, // 2: api.v1.Orchestrator.RegisterWorker:input_type -> api.v1.RegisterWorkerRequest
+	4, // 3: api.v1.Orchestrator.StreamTasks:input_type -> api.v1.StreamTasksRequest
+	6, // 4: api.v1.Orchestrator.CompleteTask:input_type -> api.v1.CompleteTaskRequest
+	1, // 5: api.v1.Orchestrator.SubmitTask:output_type -> api.v1.SubmitTaskResponse
+	3, // 6: api.v1.Orchestrator.RegisterWorker:output_type -> api.v1.RegisterWorkerResponse
+	5, // 7: api.v1.Orchestrator.StreamTasks:output_type -> api.v1.TaskEvent
+	7, // 8: api.v1.Orchestrator.CompleteTask:output_type -> api.v1.CompleteTaskResponse
+	5, // [5:9] is the sub-list for method output_type
+	1, // [1:5] is the sub-list for method input_type
+	1, // [1:1] is the sub-list for extension type_name
+	1, // [1:1] is the sub-list for extension extendee
+	0, // [0:1] is the sub-list for field type_name
 }
 
 func init() { file_api_proto_v1_orchestrator_proto_init() }
