@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"os"
@@ -22,6 +23,8 @@ func main() {
 
 func run() error {
 	port := 50051
+	batchSize := 10
+
 	logger, err := zap.New()
 	if err != nil {
 		return err
@@ -30,6 +33,9 @@ func run() error {
 
 	taskRepo := memory.New()
 	taskService := service.New(taskRepo, logger)
+
+	stateMgr := service.NewStateManager(taskRepo, logger, batchSize)
+	go stateMgr.Run(context.Background())
 
 	grpcServer := grpc.NewServer()
 
