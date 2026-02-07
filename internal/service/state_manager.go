@@ -9,17 +9,17 @@ import (
 )
 
 type StateManager struct {
-	repo     port.TaskRepository
-	logger   port.Logger
-	interval time.Duration
+	repo      port.TaskRepository
+	logger    port.Logger
+	interval  time.Duration
 	batchSize int
 }
 
 func NewStateManager(repo port.TaskRepository, logger port.Logger, batchSize int) *StateManager {
 	return &StateManager{
-		repo:     repo,
-		logger:   logger,
-		interval: time.Duration(500 * time.Millisecond),
+		repo:      repo,
+		logger:    logger,
+		interval:  time.Duration(500 * time.Millisecond),
 		batchSize: batchSize,
 	}
 }
@@ -48,7 +48,6 @@ func (s *StateManager) Run(ctx context.Context) {
 						s.logger.Error("failed to save task", err, port.String("task_id", task.ID))
 						continue
 					}
-
 				}
 			}
 		}
