@@ -48,3 +48,25 @@ func (s *Orchestrator) SubmitTask(ctx context.Context, req *pb.SubmitTaskRequest
 		TaskId: task.ID,
 	}, nil
 }
+
+func (s *Orchestrator) PollTask(ctx context.Context, req *pb.PollTaskRequest) (*pb.PollTaskResponse, error) {
+	if req.WorkerId == "" {
+		return nil, status.Error(codes.InvalidArgument, "Worker ID cannot be empty")
+	}
+	task, err := s.repo.AcquireTask(ctx, req.WorkerId, req.TaskTypes)
+	if err != nil {
+		s.logger.Error("unable to acquire a task", err)
+		return nil, err
+	}
+
+	if task == nil {
+		return &pb.PollTaskResponse{}, nil
+	}
+
+	s.logger.Info("Task successfuly acquired", port.String("TaskID", task.ID), port.String("workerID", req.WorkerId))
+	return &pb.PollTaskResponse{
+		TaskId:  task.ID,
+		Type:    task.Type,
+		Payload: task.Payload,
+	}, nil
+}

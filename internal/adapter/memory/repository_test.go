@@ -48,8 +48,8 @@ func TestInMemoryTaskRepository_ListEligible(t *testing.T) {
 	}
 }
 
-
 type NoOpLogger struct{}
-func (n *NoOpLogger) Info(msg string, fields ...port.Field) {}
+
+func (n *NoOpLogger) Info(msg string, fields ...port.Field)             {}
 func (n *NoOpLogger) Error(msg string, err error, fields ...port.Field) {}
-func (n *NoOpLogger) Sync() error { return nil }
+func (n *NoOpLogger) Sync() error                                       { return nil }

@@ -33,7 +33,7 @@ func NewTask(id, clientID, taskType string, payload []byte, runAt time.Time) *Ta
 	}
 	return &Task{
 		ID:        id,
-		ClientID: clientID,
+		ClientID:  clientID,
 		Type:      taskType,
 		Payload:   payload,
 		State:     Pending,

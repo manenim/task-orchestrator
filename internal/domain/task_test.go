@@ -55,7 +55,7 @@ func TestTask_IllegalTransitions(t *testing.T) {
 
 func TestTask_RetryLogic(t *testing.T) {
 	task := Task{
-		ID:        "123",
+		ID: "123",
 
 		Type:      "email",
 		Payload:   nil,

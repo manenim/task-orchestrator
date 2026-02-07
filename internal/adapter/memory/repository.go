@@ -11,14 +11,14 @@ import (
 )
 
 type InMemoryTaskRepository struct {
-	mu    sync.RWMutex
-	store map[string]*domain.Task
+	mu     sync.RWMutex
+	store  map[string]*domain.Task
 	logger port.Logger
 }
 
 func New(logger port.Logger) *InMemoryTaskRepository {
 	return &InMemoryTaskRepository{
-		store: make(map[string]*domain.Task),
+		store:  make(map[string]*domain.Task),
 		logger: logger,
 	}
 }
@@ -71,18 +71,16 @@ func (r *InMemoryTaskRepository) AcquireTask(ctx context.Context, workerID strin
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	for  _, task :=  range r.store {
+	for _, task := range r.store {
 		if task.State == domain.Scheduled {
 			err := task.UpdateState(domain.Running)
 			if err != nil {
 				r.logger.Error("Failed to update task", err)
 				continue
 			}
-			
 			task.WorkerID = workerID
 			return task, nil
 		}
 	}
-
 	return nil, nil
 }
