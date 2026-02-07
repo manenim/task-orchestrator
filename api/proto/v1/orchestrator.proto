@@ -14,6 +14,8 @@ service Orchestrator {
     rpc StreamTasks (StreamTasksRequest) returns (stream TaskEvent);
 
     rpc CompleteTask (CompleteTaskRequest) returns (CompleteTaskResponse);
+
+    rpc PollTask(PollTaskRequest) returns (PollTaskResponse);
 }
 
 // MESSAGES --------------------------------------------------------------------
@@ -58,4 +60,15 @@ message CompleteTaskRequest {
 
 message CompleteTaskResponse {
     bool stop_stream = 1;
+}
+
+message PollTaskRequest {
+    string worker_id = 1;
+    repeated string task_types = 2;
+}
+
+message PollTaskResponse {
+    string task_id = 1;
+    string type  = 2;
+    bytes payload = 3;
 }

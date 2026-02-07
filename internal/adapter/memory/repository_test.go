@@ -6,10 +6,11 @@ import (
 	"time"
 
 	"github.com/manenim/task-orchestrator/internal/domain"
+	"github.com/manenim/task-orchestrator/internal/port"
 )
 
 func TestInMemoryTaskRepository_ListEligible(t *testing.T) {
-	repo := New()
+	repo := New(&NoOpLogger{})
 	ctx := context.Background()
 
 	now := time.Now().UTC()
@@ -17,9 +18,9 @@ func TestInMemoryTaskRepository_ListEligible(t *testing.T) {
 	past := now.Add(-1 * time.Hour)
 
 	tasks := []*domain.Task{
-		domain.NewTask("1", "immediate", nil, past),
-		domain.NewTask("2", "future", nil, future),
-		domain.NewTask("3", "immediate_2", nil, past),
+		domain.NewTask("1", "test-client", "immediate", nil, past),
+		domain.NewTask("2", "test-client", "future", nil, future),
+		domain.NewTask("3", "test-client", "immediate_2", nil, past),
 	}
 
 	tasks[2].State = domain.Completed
@@ -46,3 +47,9 @@ func TestInMemoryTaskRepository_ListEligible(t *testing.T) {
 		t.Errorf("expected task 1, got %s", eligible[0].ID)
 	}
 }
+
+
+type NoOpLogger struct{}
+func (n *NoOpLogger) Info(msg string, fields ...port.Field) {}
+func (n *NoOpLogger) Error(msg string, err error, fields ...port.Field) {}
+func (n *NoOpLogger) Sync() error { return nil }

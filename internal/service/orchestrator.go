@@ -37,7 +37,7 @@ func (s *Orchestrator) SubmitTask(ctx context.Context, req *pb.SubmitTaskRequest
 		runAt = req.RunAt.AsTime()
 	}
 
-	task := domain.NewTask(req.TaskId, req.Type, req.Payload, runAt)
+	task := domain.NewTask(req.TaskId, req.ClientId, req.Type, req.Payload, runAt)
 
 	if err := s.repo.Create(ctx, task); err != nil {
 		return nil, err

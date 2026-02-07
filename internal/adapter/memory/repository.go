@@ -7,16 +7,19 @@ import (
 	"time"
 
 	"github.com/manenim/task-orchestrator/internal/domain"
+	"github.com/manenim/task-orchestrator/internal/port"
 )
 
 type InMemoryTaskRepository struct {
 	mu    sync.RWMutex
 	store map[string]*domain.Task
+	logger port.Logger
 }
 
-func New() *InMemoryTaskRepository {
+func New(logger port.Logger) *InMemoryTaskRepository {
 	return &InMemoryTaskRepository{
 		store: make(map[string]*domain.Task),
+		logger: logger,
 	}
 }
 func (r *InMemoryTaskRepository) Create(ctx context.Context, t *domain.Task) error {
@@ -62,4 +65,24 @@ func (r *InMemoryTaskRepository) Update(ctx context.Context, t *domain.Task) err
 	}
 	r.store[t.ID] = t
 	return nil
+}
+
+func (r *InMemoryTaskRepository) AcquireTask(ctx context.Context, workerID string, taskTypes []string) (*domain.Task, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	for  _, task :=  range r.store {
+		if task.State == domain.Scheduled {
+			err := task.UpdateState(domain.Running)
+			if err != nil {
+				r.logger.Error("Failed to update task", err)
+				continue
+			}
+			
+			task.WorkerID = workerID
+			return task, nil
+		}
+	}
+
+	return nil, nil
 }

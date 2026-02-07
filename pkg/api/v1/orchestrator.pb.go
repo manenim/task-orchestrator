@@ -28,7 +28,7 @@ type SubmitTaskRequest struct {
 	Type          string                 `protobuf:"bytes,2,opt,name=type,proto3" json:"type,omitempty"`
 	Payload       []byte                 `protobuf:"bytes,3,opt,name=payload,proto3" json:"payload,omitempty"`
 	ClientId      string                 `protobuf:"bytes,4,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
-	RunAt         *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=run_at,json=runAt,proto3" json:"run_at,omitempty"` // Scheduled execution time
+	RunAt         *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=run_at,json=runAt,proto3" json:"run_at,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -454,6 +454,118 @@ func (x *CompleteTaskResponse) GetStopStream() bool {
 	return false
 }
 
+type PollTaskRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	WorkerId      string                 `protobuf:"bytes,1,opt,name=worker_id,json=workerId,proto3" json:"worker_id,omitempty"`
+	TaskTypes     []string               `protobuf:"bytes,2,rep,name=task_types,json=taskTypes,proto3" json:"task_types,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PollTaskRequest) Reset() {
+	*x = PollTaskRequest{}
+	mi := &file_api_proto_v1_orchestrator_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PollTaskRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PollTaskRequest) ProtoMessage() {}
+
+func (x *PollTaskRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_api_proto_v1_orchestrator_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PollTaskRequest.ProtoReflect.Descriptor instead.
+func (*PollTaskRequest) Descriptor() ([]byte, []int) {
+	return file_api_proto_v1_orchestrator_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *PollTaskRequest) GetWorkerId() string {
+	if x != nil {
+		return x.WorkerId
+	}
+	return ""
+}
+
+func (x *PollTaskRequest) GetTaskTypes() []string {
+	if x != nil {
+		return x.TaskTypes
+	}
+	return nil
+}
+
+type PollTaskResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	TaskId        string                 `protobuf:"bytes,1,opt,name=task_id,json=taskId,proto3" json:"task_id,omitempty"`
+	Type          string                 `protobuf:"bytes,2,opt,name=type,proto3" json:"type,omitempty"`
+	Payload       []byte                 `protobuf:"bytes,3,opt,name=payload,proto3" json:"payload,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PollTaskResponse) Reset() {
+	*x = PollTaskResponse{}
+	mi := &file_api_proto_v1_orchestrator_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PollTaskResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PollTaskResponse) ProtoMessage() {}
+
+func (x *PollTaskResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_api_proto_v1_orchestrator_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PollTaskResponse.ProtoReflect.Descriptor instead.
+func (*PollTaskResponse) Descriptor() ([]byte, []int) {
+	return file_api_proto_v1_orchestrator_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *PollTaskResponse) GetTaskId() string {
+	if x != nil {
+		return x.TaskId
+	}
+	return ""
+}
+
+func (x *PollTaskResponse) GetType() string {
+	if x != nil {
+		return x.Type
+	}
+	return ""
+}
+
+func (x *PollTaskResponse) GetPayload() []byte {
+	if x != nil {
+		return x.Payload
+	}
+	return nil
+}
+
 var File_api_proto_v1_orchestrator_proto protoreflect.FileDescriptor
 
 const file_api_proto_v1_orchestrator_proto_rawDesc = "" +
@@ -485,13 +597,22 @@ const file_api_proto_v1_orchestrator_proto_rawDesc = "" +
 	"\x06result\x18\x04 \x01(\fR\x06result\"7\n" +
 	"\x14CompleteTaskResponse\x12\x1f\n" +
 	"\vstop_stream\x18\x01 \x01(\bR\n" +
-	"stopStream2\xaf\x02\n" +
+	"stopStream\"M\n" +
+	"\x0fPollTaskRequest\x12\x1b\n" +
+	"\tworker_id\x18\x01 \x01(\tR\bworkerId\x12\x1d\n" +
+	"\n" +
+	"task_types\x18\x02 \x03(\tR\ttaskTypes\"Y\n" +
+	"\x10PollTaskResponse\x12\x17\n" +
+	"\atask_id\x18\x01 \x01(\tR\x06taskId\x12\x12\n" +
+	"\x04type\x18\x02 \x01(\tR\x04type\x12\x18\n" +
+	"\apayload\x18\x03 \x01(\fR\apayload2\xee\x02\n" +
 	"\fOrchestrator\x12C\n" +
 	"\n" +
 	"SubmitTask\x12\x19.api.v1.SubmitTaskRequest\x1a\x1a.api.v1.SubmitTaskResponse\x12O\n" +
 	"\x0eRegisterWorker\x12\x1d.api.v1.RegisterWorkerRequest\x1a\x1e.api.v1.RegisterWorkerResponse\x12>\n" +
 	"\vStreamTasks\x12\x1a.api.v1.StreamTasksRequest\x1a\x11.api.v1.TaskEvent0\x01\x12I\n" +
-	"\fCompleteTask\x12\x1b.api.v1.CompleteTaskRequest\x1a\x1c.api.v1.CompleteTaskResponseB1Z/github.com/manenim/task-orchestrator/pkg/api/v1b\x06proto3"
+	"\fCompleteTask\x12\x1b.api.v1.CompleteTaskRequest\x1a\x1c.api.v1.CompleteTaskResponse\x12=\n" +
+	"\bPollTask\x12\x17.api.v1.PollTaskRequest\x1a\x18.api.v1.PollTaskResponseB1Z/github.com/manenim/task-orchestrator/pkg/api/v1b\x06proto3"
 
 var (
 	file_api_proto_v1_orchestrator_proto_rawDescOnce sync.Once
@@ -505,7 +626,7 @@ func file_api_proto_v1_orchestrator_proto_rawDescGZIP() []byte {
 	return file_api_proto_v1_orchestrator_proto_rawDescData
 }
 
-var file_api_proto_v1_orchestrator_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
+var file_api_proto_v1_orchestrator_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
 var file_api_proto_v1_orchestrator_proto_goTypes = []any{
 	(*SubmitTaskRequest)(nil),      // 0: api.v1.SubmitTaskRequest
 	(*SubmitTaskResponse)(nil),     // 1: api.v1.SubmitTaskResponse
@@ -515,23 +636,27 @@ var file_api_proto_v1_orchestrator_proto_goTypes = []any{
 	(*TaskEvent)(nil),              // 5: api.v1.TaskEvent
 	(*CompleteTaskRequest)(nil),    // 6: api.v1.CompleteTaskRequest
 	(*CompleteTaskResponse)(nil),   // 7: api.v1.CompleteTaskResponse
-	(*timestamppb.Timestamp)(nil),  // 8: google.protobuf.Timestamp
+	(*PollTaskRequest)(nil),        // 8: api.v1.PollTaskRequest
+	(*PollTaskResponse)(nil),       // 9: api.v1.PollTaskResponse
+	(*timestamppb.Timestamp)(nil),  // 10: google.protobuf.Timestamp
 }
 var file_api_proto_v1_orchestrator_proto_depIdxs = []int32{
-	8, // 0: api.v1.SubmitTaskRequest.run_at:type_name -> google.protobuf.Timestamp
-	0, // 1: api.v1.Orchestrator.SubmitTask:input_type -> api.v1.SubmitTaskRequest
-	2, // 2: api.v1.Orchestrator.RegisterWorker:input_type -> api.v1.RegisterWorkerRequest
-	4, // 3: api.v1.Orchestrator.StreamTasks:input_type -> api.v1.StreamTasksRequest
-	6, // 4: api.v1.Orchestrator.CompleteTask:input_type -> api.v1.CompleteTaskRequest
-	1, // 5: api.v1.Orchestrator.SubmitTask:output_type -> api.v1.SubmitTaskResponse
-	3, // 6: api.v1.Orchestrator.RegisterWorker:output_type -> api.v1.RegisterWorkerResponse
-	5, // 7: api.v1.Orchestrator.StreamTasks:output_type -> api.v1.TaskEvent
-	7, // 8: api.v1.Orchestrator.CompleteTask:output_type -> api.v1.CompleteTaskResponse
-	5, // [5:9] is the sub-list for method output_type
-	1, // [1:5] is the sub-list for method input_type
-	1, // [1:1] is the sub-list for extension type_name
-	1, // [1:1] is the sub-list for extension extendee
-	0, // [0:1] is the sub-list for field type_name
+	10, // 0: api.v1.SubmitTaskRequest.run_at:type_name -> google.protobuf.Timestamp
+	0,  // 1: api.v1.Orchestrator.SubmitTask:input_type -> api.v1.SubmitTaskRequest
+	2,  // 2: api.v1.Orchestrator.RegisterWorker:input_type -> api.v1.RegisterWorkerRequest
+	4,  // 3: api.v1.Orchestrator.StreamTasks:input_type -> api.v1.StreamTasksRequest
+	6,  // 4: api.v1.Orchestrator.CompleteTask:input_type -> api.v1.CompleteTaskRequest
+	8,  // 5: api.v1.Orchestrator.PollTask:input_type -> api.v1.PollTaskRequest
+	1,  // 6: api.v1.Orchestrator.SubmitTask:output_type -> api.v1.SubmitTaskResponse
+	3,  // 7: api.v1.Orchestrator.RegisterWorker:output_type -> api.v1.RegisterWorkerResponse
+	5,  // 8: api.v1.Orchestrator.StreamTasks:output_type -> api.v1.TaskEvent
+	7,  // 9: api.v1.Orchestrator.CompleteTask:output_type -> api.v1.CompleteTaskResponse
+	9,  // 10: api.v1.Orchestrator.PollTask:output_type -> api.v1.PollTaskResponse
+	6,  // [6:11] is the sub-list for method output_type
+	1,  // [1:6] is the sub-list for method input_type
+	1,  // [1:1] is the sub-list for extension type_name
+	1,  // [1:1] is the sub-list for extension extendee
+	0,  // [0:1] is the sub-list for field type_name
 }
 
 func init() { file_api_proto_v1_orchestrator_proto_init() }
@@ -545,7 +670,7 @@ func file_api_proto_v1_orchestrator_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_api_proto_v1_orchestrator_proto_rawDesc), len(file_api_proto_v1_orchestrator_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   8,
+			NumMessages:   10,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

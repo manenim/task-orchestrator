@@ -31,7 +31,7 @@ func run() error {
 	}
 	defer logger.Sync()
 
-	taskRepo := memory.New()
+	taskRepo := memory.New(logger)
 	taskService := service.New(taskRepo, logger)
 
 	stateMgr := service.NewStateManager(taskRepo, logger, batchSize)

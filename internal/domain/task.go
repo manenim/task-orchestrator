@@ -21,16 +21,19 @@ type Task struct {
 	State     TaskState
 	RunAt     time.Time
 	Version   int
+	WorkerID  string
+	ClientID  string
 	CreatedAt time.Time
 	UpdatedAt time.Time
 }
 
-func NewTask(id string, taskType string, payload []byte, runAt time.Time) *Task {
+func NewTask(id, clientID, taskType string, payload []byte, runAt time.Time) *Task {
 	if runAt.IsZero() {
 		runAt = time.Now().UTC()
 	}
 	return &Task{
 		ID:        id,
+		ClientID: clientID,
 		Type:      taskType,
 		Payload:   payload,
 		State:     Pending,
