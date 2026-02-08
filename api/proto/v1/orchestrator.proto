@@ -53,7 +53,7 @@ message TaskEvent {
     string job_type = 2;
     bytes payload = 3;
     bool is_cancellation = 4; 
-    int32 timeout_seconds = 5; // New field
+    int32 timeout_seconds = 5; 
 }
 
 message CompleteTaskRequest {

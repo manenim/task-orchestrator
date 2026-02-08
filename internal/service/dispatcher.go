@@ -55,9 +55,10 @@ func (d *Dispatcher) dispatch(ctx context.Context, task *domain.Task) {
 		return
 	}
 	event := &pb.TaskEvent{
-		TaskId:  task.ID,
-		JobType: task.Type,
-		Payload: task.Payload,
+		TaskId:         task.ID,
+		JobType:        task.Type,
+		Payload:        task.Payload,
+		TimeoutSeconds: task.TimeoutSeconds,
 	}
 	if err := stream.Send(event); err != nil {
 		d.logger.Error("Failed to dispatch task", err)

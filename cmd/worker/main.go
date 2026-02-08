@@ -20,12 +20,9 @@ import (
 )
 
 func main() {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 
-
-	 ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-    defer stop()
-
-	
 	workerID := "worker-" + uuid.New().String()
 	logger, err := zap.New()
 	if err != nil {
@@ -43,21 +40,20 @@ func main() {
 
 	for {
 		if err := stream(ctx, client, workerID, logger); err != nil {
-			 if ctx.Err() != nil {
-                     return 
-                }
-                logger.Error("streaming error:", err)
-                time.Sleep(5 * time.Second)
+			if ctx.Err() != nil {
+				return 
+			}
+			logger.Error("streaming error, retrying in 5s:", err)
+			time.Sleep(5 * time.Second)
 		}
 	}
-
 }
 
 func stream(ctx context.Context, client pb.OrchestratorClient, workerID string, logger port.Logger) error {
 	runningTasks := make(map[string]context.CancelFunc)
 	var mu sync.Mutex
-	  var wg sync.WaitGroup
-	      defer wg.Wait() 
+	var wg sync.WaitGroup
+	defer wg.Wait() 
 
 	streamCtx, cancelStream := context.WithCancel(context.Background())
 	defer cancelStream()
@@ -73,11 +69,10 @@ func stream(ctx context.Context, client pb.OrchestratorClient, workerID string, 
 		select {
 		case <-ctx.Done(): 
 			logger.Info("Shutdown signal received. Waiting for active tasks...")
-			wg.Wait() 
+			wg.Wait()      
 			cancelStream() 
 			logger.Info("All tasks finished. Closing stream.")
-		case <-streamCtx.Done(): 
-			
+		case <-streamCtx.Done():
 		}
 	}()
 
@@ -98,29 +93,34 @@ func stream(ctx context.Context, client pb.OrchestratorClient, workerID string, 
 			continue
 		}
 
-		ctx, cancel := context.WithCancel(context.Background())
+	
+		var timeoutDuration time.Duration
+		if event.TimeoutSeconds == 0 {
+			timeoutDuration = 30 * time.Minute 
+		} else {
+			timeoutDuration = time.Duration(event.TimeoutSeconds) * time.Second
+		}
+
+		
+		taskCtx, cancel := context.WithTimeout(context.Background(), timeoutDuration)
+
 		mu.Lock()
 		runningTasks[event.TaskId] = cancel
 		mu.Unlock()
+
 		wg.Add(1)
-        go func(taskID, taskType string, taskCtx context.Context) {
-            defer wg.Done()
+		go func(taskID, taskType string, tCtx context.Context) {
+			defer wg.Done()
+			defer cancel() 
 			defer func() {
 				mu.Lock()
 				delete(runningTasks, taskID)
 				mu.Unlock()
 			}()
 
-			logger.Info("Starting task...", port.String("task_id", taskID), port.String("type", taskType))
+			logger.Info("Starting task...", port.String("task_id", taskID), port.String("type", taskType), port.String("timeout", timeoutDuration.String()))
 
-			select {
-			case <-taskCtx.Done():
-				logger.Info("Task Aborted by Cancellation!", port.String("task_id", taskID))
-				return
-			case <-time.After(2 * time.Second):
-			}
-
-			result, err, isRetryable := processTask(taskType)
+			result, err, isRetryable := processTask(tCtx, taskType, logger)
 
 			req := &pb.CompleteTaskRequest{
 				TaskId:   taskID,
@@ -141,22 +141,36 @@ func stream(ctx context.Context, client pb.OrchestratorClient, workerID string, 
 				logger.Error("Failed to report completion", rpcErr)
 			}
 
-		}(event.TaskId, event.JobType, ctx)
+		}(event.TaskId, event.JobType, taskCtx)
 	}
 }
 
-func processTask(taskType string) (result string, err error, isRetryable bool) {
-	if taskType == "slow_job" {
-		time.Sleep(10 * time.Second)
-		return "I took my time", nil, false
+func processTask(ctx context.Context, taskType string, logger port.Logger) (result string, err error, isRetryable bool) {
+	var duration time.Duration
+
+	switch taskType {
+	case "slow_job":
+		duration = 10 * time.Second
+	case "unstable_job":
+		duration = 2 * time.Second
+	default:
+		duration = 100 * time.Millisecond 
 	}
-	if taskType == "unstable_job" {
-		r := rand.Intn(100)
-		if r > 30 && r <= 70 {
-			return "", fmt.Errorf("simulated transient error (network glitch)"), true
-		} else if r > 70 {
-			return "", fmt.Errorf("simulated fatal error (invalid input)"), false
+
+	select {
+	case <-time.After(duration):
+		if taskType == "unstable_job" {
+			r := rand.Intn(100)
+			if r > 30 && r <= 70 {
+				return "", fmt.Errorf("simulated transient error (network glitch)"), true
+			} else if r > 70 {
+				return "", fmt.Errorf("simulated fatal error (invalid input)"), false
+			}
 		}
+		return "success result", nil, false
+
+	case <-ctx.Done():
+		logger.Info("Task context done", port.String("error", ctx.Err().Error()))
+		return "", ctx.Err(), true 
 	}
-	return "success result", nil, false
 }

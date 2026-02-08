@@ -25,28 +25,30 @@ type Task struct {
 	Version      int
 	WorkerID     string
 	ClientID     string
-	RetryCount   int
-	MaxRetries   int
-	LastFailedAt time.Time
-	CreatedAt    time.Time
-	UpdatedAt    time.Time
+	RetryCount    int
+	MaxRetries    int
+	TimeoutSeconds int32
+	LastFailedAt  time.Time
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
 }
 
-func NewTask(id, clientID, taskType string, payload []byte, runAt time.Time) *Task {
+func NewTask(id, clientID, taskType string, payload []byte, runAt time.Time, timeout int32) *Task {
 	if runAt.IsZero() {
 		runAt = time.Now().UTC()
 	}
 	return &Task{
-		ID:         id,
-		ClientID:   clientID,
-		Type:       taskType,
-		Payload:    payload,
-		State:      Pending,
-		RunAt:      runAt,
-		Version:    1,
-		MaxRetries: 3,
-		CreatedAt:  time.Now().UTC(),
-		UpdatedAt:  time.Now().UTC(),
+		ID:             id,
+		ClientID:       clientID,
+		Type:           taskType,
+		Payload:        payload,
+		State:          Pending,
+		RunAt:          runAt,
+		Version:        1,
+		MaxRetries:     3,
+		TimeoutSeconds: timeout,
+		CreatedAt:      time.Now().UTC(),
+		UpdatedAt:      time.Now().UTC(),
 	}
 }
 
