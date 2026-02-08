@@ -8,6 +8,7 @@ import (
 
 	"github.com/manenim/task-orchestrator/internal/adapter/memory"
 	"github.com/manenim/task-orchestrator/internal/adapter/zap"
+	"github.com/manenim/task-orchestrator/internal/domain"
 	"github.com/manenim/task-orchestrator/internal/service"
 	pb "github.com/manenim/task-orchestrator/pkg/api/v1"
 	"google.golang.org/grpc"
@@ -24,6 +25,7 @@ func main() {
 func run() error {
 	port := 50051
 	batchSize := 10
+	taskQueueBufferSize := 100
 
 	logger, err := zap.New()
 	if err != nil {
@@ -32,10 +34,13 @@ func run() error {
 	defer logger.Sync()
 
 	taskRepo := memory.New(logger)
-	taskService := service.New(taskRepo, logger)
-
-	stateMgr := service.NewStateManager(taskRepo, logger, batchSize)
+	taskQueue := make(chan *domain.Task, taskQueueBufferSize)
+	workerManger := service.NewWorkerManager(logger)
+	dispatcher := service.NewDispatcher(workerManger, taskQueue, logger)
+	taskService := service.New(taskRepo, logger, workerManger)
+	stateMgr := service.NewStateManager(taskRepo, logger, batchSize, taskQueue)
 	go stateMgr.Run(context.Background())
+	go dispatcher.Run(context.Background())
 
 	grpcServer := grpc.NewServer()
 

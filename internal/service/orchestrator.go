@@ -13,14 +13,16 @@ import (
 
 type Orchestrator struct {
 	pb.UnimplementedOrchestratorServer
-	repo   port.TaskRepository
-	logger port.Logger
+	repo          port.TaskRepository
+	logger        port.Logger
+	workerManager *WorkerManager
 }
 
-func New(repo port.TaskRepository, logger port.Logger) *Orchestrator {
+func New(repo port.TaskRepository, logger port.Logger, wm *WorkerManager) *Orchestrator {
 	return &Orchestrator{
-		repo:   repo,
-		logger: logger,
+		repo:          repo,
+		logger:        logger,
+		workerManager: wm,
 	}
 }
 
@@ -69,4 +71,20 @@ func (s *Orchestrator) PollTask(ctx context.Context, req *pb.PollTaskRequest) (*
 		Type:    task.Type,
 		Payload: task.Payload,
 	}, nil
+}
+
+func (s *Orchestrator) StreamTasks(req *pb.StreamTasksRequest, stream pb.Orchestrator_StreamTasksServer) error {
+
+	if err := s.workerManager.Add(req.WorkerId, stream); err != nil {
+		return err
+	}
+	defer func() {
+		if err := s.workerManager.Remove(req.WorkerId); err != nil {
+			s.logger.Error("Failed to remove worker", err)
+		}
+	}()
+
+	<-stream.Context().Done()
+
+	return nil
 }

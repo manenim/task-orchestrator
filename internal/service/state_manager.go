@@ -13,14 +13,16 @@ type StateManager struct {
 	logger    port.Logger
 	interval  time.Duration
 	batchSize int
+	taskQueue chan<- *domain.Task
 }
 
-func NewStateManager(repo port.TaskRepository, logger port.Logger, batchSize int) *StateManager {
+func NewStateManager(repo port.TaskRepository, logger port.Logger, batchSize int, taskQueue chan<- *domain.Task) *StateManager {
 	return &StateManager{
 		repo:      repo,
 		logger:    logger,
 		interval:  time.Duration(500 * time.Millisecond),
 		batchSize: batchSize,
+		taskQueue: taskQueue,
 	}
 }
 
@@ -48,6 +50,7 @@ func (s *StateManager) Run(ctx context.Context) {
 						s.logger.Error("failed to save task", err, port.String("task_id", task.ID))
 						continue
 					}
+					s.taskQueue <- task
 				}
 			}
 		}
