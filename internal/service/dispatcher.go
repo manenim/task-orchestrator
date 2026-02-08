@@ -46,6 +46,10 @@ func (d *Dispatcher) dispatch(ctx context.Context, task *domain.Task) {
 		return
 	}
 	task.WorkerID = workerID
+	if err := task.UpdateState(domain.Running); err != nil {
+		d.logger.Error("Failed to update task state to RUNNING", err)
+		return
+	}
 	if err := d.repo.Update(ctx, task); err != nil {
 		d.logger.Error("Failed to update task worker ID", err)
 		return

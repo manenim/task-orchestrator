@@ -19,6 +19,10 @@ func Int(k string, v int) Field {
 	return Field{Key: k, Value: v}
 }
 
+func Bool(k string, v bool) Field {
+	return Field{Key: k, Value: v}
+}
+
 func Any(k string, v interface{}) Field {
 	return Field{Key: k, Value: v}
 }

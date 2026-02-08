@@ -27,6 +27,7 @@ message SubmitTaskRequest {
     bytes payload = 3;      
     string client_id = 4;  
     google.protobuf.Timestamp run_at = 5; 
+    int32 max_retries = 6;
 }
 
 message SubmitTaskResponse {
@@ -59,6 +60,7 @@ message CompleteTaskRequest {
     string worker_id = 2; 
     string error_message = 3; 
     bytes result = 4;
+    bool is_retryable = 5;
 }
 
 message CompleteTaskResponse {

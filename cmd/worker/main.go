@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
+	"math/rand"
 	"sync"
 	"time"
 
@@ -30,6 +32,7 @@ func main() {
 	defer conn.Close()
 
 	client := pb.NewOrchestratorClient(conn)
+
 	for {
 		if err := stream(client, workerID, logger); err != nil {
 			logger.Error("streaming error:", err)
@@ -70,20 +73,56 @@ func stream(client pb.OrchestratorClient, workerID string, logger port.Logger) e
 		mu.Lock()
 		runningTasks[event.TaskId] = cancel
 		mu.Unlock()
-		go func(taskID string, taskCtx context.Context) {
+		go func(taskID string, taskType string, taskCtx context.Context) {
 			defer func() {
 				mu.Lock()
 				delete(runningTasks, taskID)
 				mu.Unlock()
 			}()
-			logger.Info("Starting task...", port.String("task_id", taskID))
+
+			logger.Info("Starting task...", port.String("task_id", taskID), port.String("type", taskType))
 
 			select {
-			case <-time.After(5 * time.Second):
-				logger.Info("Task Completed!", port.String("task_id", taskID))
 			case <-taskCtx.Done():
 				logger.Info("Task Aborted by Cancellation!", port.String("task_id", taskID))
+				return
+			case <-time.After(2 * time.Second):
 			}
-		}(event.TaskId, ctx)
+
+			result, err, isRetryable := processTask(taskType)
+
+			req := &pb.CompleteTaskRequest{
+				TaskId:   taskID,
+				WorkerId: workerID,
+			}
+
+			if err != nil {
+				logger.Error("Task Failed", err, port.String("task_id", taskID), port.Bool("retryable", isRetryable))
+				req.ErrorMessage = err.Error()
+				req.IsRetryable = isRetryable
+			} else {
+				logger.Info("Task Completed Successfully", port.String("task_id", taskID))
+				req.Result = []byte(result)
+			}
+
+			_, rpcErr := client.CompleteTask(context.Background(), req)
+			if rpcErr != nil {
+				logger.Error("Failed to report completion", rpcErr)
+			}
+
+		}(event.TaskId, event.JobType, ctx)
 	}
+}
+
+
+func processTask(taskType string) (result string, err error, isRetryable bool) {
+	if taskType == "unstable_job" {
+		r := rand.Intn(100)
+		if r > 30 && r <= 70 {
+			return "", fmt.Errorf("simulated transient error (network glitch)"), true
+		} else if r > 70 {
+			return "", fmt.Errorf("simulated fatal error (invalid input)"), false
+		}
+	}
+	return "success result", nil, false
 }

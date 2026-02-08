@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"math"
 	"time"
 
 	"github.com/manenim/task-orchestrator/internal/domain"
@@ -42,7 +43,7 @@ func (s *Orchestrator) SubmitTask(ctx context.Context, req *pb.SubmitTaskRequest
 	task := domain.NewTask(req.TaskId, req.ClientId, req.Type, req.Payload, runAt)
 
 	if err := s.repo.Create(ctx, task); err != nil {
-		return nil, err
+		return nil, s.statusFromError(err)
 	}
 	s.logger.Info("Task Submitted", port.String("id", task.ID))
 
@@ -70,40 +71,81 @@ func (s *Orchestrator) StreamTasks(req *pb.StreamTasksRequest, stream pb.Orchest
 
 func (s *Orchestrator) CancelTask(ctx context.Context, req *pb.CancelTaskRequest) (*pb.CancelTaskResponse, error) {
 	if req.TaskId == "" {
-		return nil, status.Error(codes.InvalidArgument, "Task ID cannot be empty (client must generate ID for idempotency)")
+		return nil, status.Error(codes.InvalidArgument, "Task ID cannot be empty")
 	}
 	task, err := s.repo.Get(ctx, req.TaskId)
 	if err != nil {
-		return &pb.CancelTaskResponse{}, err
+		return nil, s.statusFromError(err)
 	}
 
-	if task.State == domain.Completed || task.State == domain.Cancelled {
-		return &pb.CancelTaskResponse{
-			Success: true,
-		}, nil
-	}
-	if task.WorkerID == "" {
-		if err := task.UpdateState(domain.Cancelled); err != nil {
-			s.logger.Error("Failed to update task", err)
-			return &pb.CancelTaskResponse{}, err
-		}
-		if err := s.repo.Update(ctx, task); err != nil {
-			s.logger.Error("unable to update task state to cancelled.", err, port.String("taskID", req.TaskId))
-			return &pb.CancelTaskResponse{}, err
-		}
-		return &pb.CancelTaskResponse{Success: true}, nil
-	} else {
+	if task.WorkerID != "" {
 		if err := s.workerManager.CancelTask(task.WorkerID, task.ID); err != nil {
 			s.logger.Error("Failed to send cancel signal to worker", err)
 		}
-		if err := task.UpdateState(domain.Cancelled); err != nil {
-			s.logger.Error("Failed to update task", err)
-			return &pb.CancelTaskResponse{}, err
+	}
+
+	if err := task.UpdateState(domain.Cancelled); err != nil {
+		if err == domain.ErrTaskFinalized {
+			return &pb.CancelTaskResponse{Success: true}, nil
 		}
-		if err := s.repo.Update(ctx, task); err != nil {
-			s.logger.Error("unable to update task state to cancelled.", err, port.String("taskID", req.TaskId))
-			return &pb.CancelTaskResponse{}, err
+		return nil, s.statusFromError(err)
+	}
+
+	if err := s.repo.Update(ctx, task); err != nil {
+		return nil, s.statusFromError(err)
+	}
+
+	return &pb.CancelTaskResponse{Success: true}, nil
+}
+
+
+func (s *Orchestrator) CompleteTask(ctx context.Context, req *pb.CompleteTaskRequest) (*pb.CompleteTaskResponse, error) {
+	task, err := s.repo.Get(ctx, req.TaskId)
+	if err != nil {
+		return nil, s.statusFromError(err)
+	}
+	
+	task.WorkerID = ""
+
+	if req.ErrorMessage != "" {
+		s.logger.Info("Task failed", port.String("error", req.ErrorMessage))
+		if req.IsRetryable && task.RetryCount < task.MaxRetries {
+			task.RetryCount++
+			backoffDuration := time.Duration(math.Pow(2, float64(task.RetryCount))) * time.Second
+			task.RunAt = time.Now().Add(backoffDuration)
+			task.LastFailedAt = time.Now()
+
+			if err := task.UpdateState(domain.Pending); err != nil {
+				return nil, s.statusFromError(err)
+			}
+		} else {
+			task.LastFailedAt = time.Now()
+			if err := task.UpdateState(domain.Failed); err != nil {
+				return nil, s.statusFromError(err)
+			}
 		}
-		return &pb.CancelTaskResponse{Success: true}, nil
+	} else {
+		task.Result = req.Result
+		if err := task.UpdateState(domain.Completed); err != nil {
+			return nil, s.statusFromError(err)
+		}
+	}
+
+	if err := s.repo.Update(ctx, task); err != nil {
+		return nil, s.statusFromError(err)
+	}
+	return &pb.CompleteTaskResponse{StopStream: false}, nil
+}
+
+func (s *Orchestrator) statusFromError(err error) error {
+	switch err {
+	case domain.ErrTaskNotFound:
+		return status.Error(codes.NotFound, err.Error())
+	case domain.ErrInvalidTransition:
+		return status.Error(codes.FailedPrecondition, err.Error())
+	case domain.ErrTaskFinalized:
+		return status.Error(codes.FailedPrecondition, err.Error())
+	default:
+		return status.Error(codes.Internal, err.Error())
 	}
 }

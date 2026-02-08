@@ -19,11 +19,15 @@ type Task struct {
 	ID        string
 	Type      string
 	Payload   []byte
+	Result    []byte
 	State     TaskState
 	RunAt     time.Time
 	Version   int
 	WorkerID  string
 	ClientID  string
+	RetryCount int
+	MaxRetries int
+	LastFailedAt time.Time
 	CreatedAt time.Time
 	UpdatedAt time.Time
 }
@@ -40,6 +44,7 @@ func NewTask(id, clientID, taskType string, payload []byte, runAt time.Time) *Ta
 		State:     Pending,
 		RunAt:     runAt,
 		Version:   1,
+		MaxRetries: 3,
 		CreatedAt: time.Now().UTC(),
 		UpdatedAt: time.Now().UTC(),
 	}

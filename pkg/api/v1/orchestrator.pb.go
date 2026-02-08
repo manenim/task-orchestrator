@@ -29,6 +29,7 @@ type SubmitTaskRequest struct {
 	Payload       []byte                 `protobuf:"bytes,3,opt,name=payload,proto3" json:"payload,omitempty"`
 	ClientId      string                 `protobuf:"bytes,4,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
 	RunAt         *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=run_at,json=runAt,proto3" json:"run_at,omitempty"`
+	MaxRetries    int32                  `protobuf:"varint,6,opt,name=max_retries,json=maxRetries,proto3" json:"max_retries,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -96,6 +97,13 @@ func (x *SubmitTaskRequest) GetRunAt() *timestamppb.Timestamp {
 		return x.RunAt
 	}
 	return nil
+}
+
+func (x *SubmitTaskRequest) GetMaxRetries() int32 {
+	if x != nil {
+		return x.MaxRetries
+	}
+	return 0
 }
 
 type SubmitTaskResponse struct {
@@ -356,6 +364,7 @@ type CompleteTaskRequest struct {
 	WorkerId      string                 `protobuf:"bytes,2,opt,name=worker_id,json=workerId,proto3" json:"worker_id,omitempty"`
 	ErrorMessage  string                 `protobuf:"bytes,3,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
 	Result        []byte                 `protobuf:"bytes,4,opt,name=result,proto3" json:"result,omitempty"`
+	IsRetryable   bool                   `protobuf:"varint,5,opt,name=is_retryable,json=isRetryable,proto3" json:"is_retryable,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -416,6 +425,13 @@ func (x *CompleteTaskRequest) GetResult() []byte {
 		return x.Result
 	}
 	return nil
+}
+
+func (x *CompleteTaskRequest) GetIsRetryable() bool {
+	if x != nil {
+		return x.IsRetryable
+	}
+	return false
 }
 
 type CompleteTaskResponse struct {
@@ -554,13 +570,15 @@ var File_api_proto_v1_orchestrator_proto protoreflect.FileDescriptor
 
 const file_api_proto_v1_orchestrator_proto_rawDesc = "" +
 	"\n" +
-	"\x1fapi/proto/v1/orchestrator.proto\x12\x06api.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xaa\x01\n" +
+	"\x1fapi/proto/v1/orchestrator.proto\x12\x06api.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xcb\x01\n" +
 	"\x11SubmitTaskRequest\x12\x17\n" +
 	"\atask_id\x18\x01 \x01(\tR\x06taskId\x12\x12\n" +
 	"\x04type\x18\x02 \x01(\tR\x04type\x12\x18\n" +
 	"\apayload\x18\x03 \x01(\fR\apayload\x12\x1b\n" +
 	"\tclient_id\x18\x04 \x01(\tR\bclientId\x121\n" +
-	"\x06run_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\x05runAt\"-\n" +
+	"\x06run_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\x05runAt\x12\x1f\n" +
+	"\vmax_retries\x18\x06 \x01(\x05R\n" +
+	"maxRetries\"-\n" +
 	"\x12SubmitTaskResponse\x12\x17\n" +
 	"\atask_id\x18\x01 \x01(\tR\x06taskId\"X\n" +
 	"\x15RegisterWorkerRequest\x12\x1b\n" +
@@ -574,12 +592,13 @@ const file_api_proto_v1_orchestrator_proto_rawDesc = "" +
 	"\atask_id\x18\x01 \x01(\tR\x06taskId\x12\x19\n" +
 	"\bjob_type\x18\x02 \x01(\tR\ajobType\x12\x18\n" +
 	"\apayload\x18\x03 \x01(\fR\apayload\x12'\n" +
-	"\x0fis_cancellation\x18\x04 \x01(\bR\x0eisCancellation\"\x88\x01\n" +
+	"\x0fis_cancellation\x18\x04 \x01(\bR\x0eisCancellation\"\xab\x01\n" +
 	"\x13CompleteTaskRequest\x12\x17\n" +
 	"\atask_id\x18\x01 \x01(\tR\x06taskId\x12\x1b\n" +
 	"\tworker_id\x18\x02 \x01(\tR\bworkerId\x12#\n" +
 	"\rerror_message\x18\x03 \x01(\tR\ferrorMessage\x12\x16\n" +
-	"\x06result\x18\x04 \x01(\fR\x06result\"7\n" +
+	"\x06result\x18\x04 \x01(\fR\x06result\x12!\n" +
+	"\fis_retryable\x18\x05 \x01(\bR\visRetryable\"7\n" +
 	"\x14CompleteTaskResponse\x12\x1f\n" +
 	"\vstop_stream\x18\x01 \x01(\bR\n" +
 	"stopStream\",\n" +
