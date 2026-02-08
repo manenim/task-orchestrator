@@ -23,15 +23,16 @@ const (
 )
 
 type SubmitTaskRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	TaskId        string                 `protobuf:"bytes,1,opt,name=task_id,json=taskId,proto3" json:"task_id,omitempty"`
-	Type          string                 `protobuf:"bytes,2,opt,name=type,proto3" json:"type,omitempty"`
-	Payload       []byte                 `protobuf:"bytes,3,opt,name=payload,proto3" json:"payload,omitempty"`
-	ClientId      string                 `protobuf:"bytes,4,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
-	RunAt         *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=run_at,json=runAt,proto3" json:"run_at,omitempty"`
-	MaxRetries    int32                  `protobuf:"varint,6,opt,name=max_retries,json=maxRetries,proto3" json:"max_retries,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	TaskId         string                 `protobuf:"bytes,1,opt,name=task_id,json=taskId,proto3" json:"task_id,omitempty"`
+	Type           string                 `protobuf:"bytes,2,opt,name=type,proto3" json:"type,omitempty"`
+	Payload        []byte                 `protobuf:"bytes,3,opt,name=payload,proto3" json:"payload,omitempty"`
+	ClientId       string                 `protobuf:"bytes,4,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
+	RunAt          *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=run_at,json=runAt,proto3" json:"run_at,omitempty"`
+	MaxRetries     int32                  `protobuf:"varint,6,opt,name=max_retries,json=maxRetries,proto3" json:"max_retries,omitempty"`
+	TimeoutSeconds int32                  `protobuf:"varint,7,opt,name=timeout_seconds,json=timeoutSeconds,proto3" json:"timeout_seconds,omitempty"` // New field
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *SubmitTaskRequest) Reset() {
@@ -102,6 +103,13 @@ func (x *SubmitTaskRequest) GetRunAt() *timestamppb.Timestamp {
 func (x *SubmitTaskRequest) GetMaxRetries() int32 {
 	if x != nil {
 		return x.MaxRetries
+	}
+	return 0
+}
+
+func (x *SubmitTaskRequest) GetTimeoutSeconds() int32 {
+	if x != nil {
+		return x.TimeoutSeconds
 	}
 	return 0
 }
@@ -296,6 +304,7 @@ type TaskEvent struct {
 	JobType        string                 `protobuf:"bytes,2,opt,name=job_type,json=jobType,proto3" json:"job_type,omitempty"`
 	Payload        []byte                 `protobuf:"bytes,3,opt,name=payload,proto3" json:"payload,omitempty"`
 	IsCancellation bool                   `protobuf:"varint,4,opt,name=is_cancellation,json=isCancellation,proto3" json:"is_cancellation,omitempty"`
+	TimeoutSeconds int32                  `protobuf:"varint,5,opt,name=timeout_seconds,json=timeoutSeconds,proto3" json:"timeout_seconds,omitempty"` // New field
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -356,6 +365,13 @@ func (x *TaskEvent) GetIsCancellation() bool {
 		return x.IsCancellation
 	}
 	return false
+}
+
+func (x *TaskEvent) GetTimeoutSeconds() int32 {
+	if x != nil {
+		return x.TimeoutSeconds
+	}
+	return 0
 }
 
 type CompleteTaskRequest struct {
@@ -570,7 +586,7 @@ var File_api_proto_v1_orchestrator_proto protoreflect.FileDescriptor
 
 const file_api_proto_v1_orchestrator_proto_rawDesc = "" +
 	"\n" +
-	"\x1fapi/proto/v1/orchestrator.proto\x12\x06api.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xcb\x01\n" +
+	"\x1fapi/proto/v1/orchestrator.proto\x12\x06api.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xf4\x01\n" +
 	"\x11SubmitTaskRequest\x12\x17\n" +
 	"\atask_id\x18\x01 \x01(\tR\x06taskId\x12\x12\n" +
 	"\x04type\x18\x02 \x01(\tR\x04type\x12\x18\n" +
@@ -578,7 +594,8 @@ const file_api_proto_v1_orchestrator_proto_rawDesc = "" +
 	"\tclient_id\x18\x04 \x01(\tR\bclientId\x121\n" +
 	"\x06run_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\x05runAt\x12\x1f\n" +
 	"\vmax_retries\x18\x06 \x01(\x05R\n" +
-	"maxRetries\"-\n" +
+	"maxRetries\x12'\n" +
+	"\x0ftimeout_seconds\x18\a \x01(\x05R\x0etimeoutSeconds\"-\n" +
 	"\x12SubmitTaskResponse\x12\x17\n" +
 	"\atask_id\x18\x01 \x01(\tR\x06taskId\"X\n" +
 	"\x15RegisterWorkerRequest\x12\x1b\n" +
@@ -587,12 +604,13 @@ const file_api_proto_v1_orchestrator_proto_rawDesc = "" +
 	"\x16RegisterWorkerResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\"1\n" +
 	"\x12StreamTasksRequest\x12\x1b\n" +
-	"\tworker_id\x18\x01 \x01(\tR\bworkerId\"\x82\x01\n" +
+	"\tworker_id\x18\x01 \x01(\tR\bworkerId\"\xab\x01\n" +
 	"\tTaskEvent\x12\x17\n" +
 	"\atask_id\x18\x01 \x01(\tR\x06taskId\x12\x19\n" +
 	"\bjob_type\x18\x02 \x01(\tR\ajobType\x12\x18\n" +
 	"\apayload\x18\x03 \x01(\fR\apayload\x12'\n" +
-	"\x0fis_cancellation\x18\x04 \x01(\bR\x0eisCancellation\"\xab\x01\n" +
+	"\x0fis_cancellation\x18\x04 \x01(\bR\x0eisCancellation\x12'\n" +
+	"\x0ftimeout_seconds\x18\x05 \x01(\x05R\x0etimeoutSeconds\"\xab\x01\n" +
 	"\x13CompleteTaskRequest\x12\x17\n" +
 	"\atask_id\x18\x01 \x01(\tR\x06taskId\x12\x1b\n" +
 	"\tworker_id\x18\x02 \x01(\tR\bworkerId\x12#\n" +

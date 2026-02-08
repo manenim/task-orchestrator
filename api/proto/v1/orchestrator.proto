@@ -28,6 +28,7 @@ message SubmitTaskRequest {
     string client_id = 4;  
     google.protobuf.Timestamp run_at = 5; 
     int32 max_retries = 6;
+    int32 timeout_seconds = 7; // New field
 }
 
 message SubmitTaskResponse {
@@ -52,7 +53,7 @@ message TaskEvent {
     string job_type = 2;
     bytes payload = 3;
     bool is_cancellation = 4; 
-
+    int32 timeout_seconds = 5; // New field
 }
 
 message CompleteTaskRequest {
