@@ -76,12 +76,12 @@ func (w *WorkerManager) Remove(id string) error {
 	return nil
 }
 
-func (w *WorkerManager) GetNextWorker() (*SafeStream, error) {
+func (w *WorkerManager) GetNextWorker() (*SafeStream, string, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
 	if len(w.workerIDs) == 0 {
-		return nil, fmt.Errorf("no active workers available to accept tasks")
+		return nil, "", fmt.Errorf("no active workers available to accept tasks")
 	}
 
 	w.rrIndex = (w.rrIndex + 1) % len(w.workerIDs)
@@ -89,8 +89,28 @@ func (w *WorkerManager) GetNextWorker() (*SafeStream, error) {
 
 	stream, exists := w.workers[workerID]
 	if !exists {
-		return nil, fmt.Errorf("internal inconsistency: worker ID %q found in list but missing from map", workerID)
+		return nil, "", fmt.Errorf("internal inconsistency: worker ID %q found in list but missing from map", workerID)
 	}
 
-	return stream, nil
+	return stream, workerID, nil
+}
+
+func (w *WorkerManager) CancelTask(workerID string, taskID string) error {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+	workerStream, exists := w.workers[workerID]
+
+	if !exists {
+		return fmt.Errorf("worker %s not found", workerID)
+	}
+	event := &pb.TaskEvent{
+		TaskId:         taskID,
+		IsCancellation: true,
+	}
+	if err := workerStream.Send(event); err != nil {
+		return fmt.Errorf("failed to send cancel event: %w", err)
+	}
+
+	w.logger.Info("Sent cancellation signal", port.String("worker_id", workerID), port.String("task_id", taskID))
+	return nil
 }

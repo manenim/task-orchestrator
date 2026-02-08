@@ -15,7 +15,8 @@ service Orchestrator {
 
     rpc CompleteTask (CompleteTaskRequest) returns (CompleteTaskResponse);
 
-    rpc PollTask(PollTaskRequest) returns (PollTaskResponse);
+    rpc CancelTask (CancelTaskRequest) returns (CancelTaskResponse);
+
 }
 
 // MESSAGES --------------------------------------------------------------------
@@ -49,6 +50,8 @@ message TaskEvent {
     string task_id = 1;
     string job_type = 2;
     bytes payload = 3;
+    bool is_cancellation = 4; 
+
 }
 
 message CompleteTaskRequest {
@@ -62,13 +65,9 @@ message CompleteTaskResponse {
     bool stop_stream = 1;
 }
 
-message PollTaskRequest {
-    string worker_id = 1;
-    repeated string task_types = 2;
-}
-
-message PollTaskResponse {
+message CancelTaskRequest {
     string task_id = 1;
-    string type  = 2;
-    bytes payload = 3;
+}
+message CancelTaskResponse {
+    bool success = 1;
 }

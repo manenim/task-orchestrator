@@ -283,12 +283,13 @@ func (x *StreamTasksRequest) GetWorkerId() string {
 }
 
 type TaskEvent struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	TaskId        string                 `protobuf:"bytes,1,opt,name=task_id,json=taskId,proto3" json:"task_id,omitempty"`
-	JobType       string                 `protobuf:"bytes,2,opt,name=job_type,json=jobType,proto3" json:"job_type,omitempty"`
-	Payload       []byte                 `protobuf:"bytes,3,opt,name=payload,proto3" json:"payload,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	TaskId         string                 `protobuf:"bytes,1,opt,name=task_id,json=taskId,proto3" json:"task_id,omitempty"`
+	JobType        string                 `protobuf:"bytes,2,opt,name=job_type,json=jobType,proto3" json:"job_type,omitempty"`
+	Payload        []byte                 `protobuf:"bytes,3,opt,name=payload,proto3" json:"payload,omitempty"`
+	IsCancellation bool                   `protobuf:"varint,4,opt,name=is_cancellation,json=isCancellation,proto3" json:"is_cancellation,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *TaskEvent) Reset() {
@@ -340,6 +341,13 @@ func (x *TaskEvent) GetPayload() []byte {
 		return x.Payload
 	}
 	return nil
+}
+
+func (x *TaskEvent) GetIsCancellation() bool {
+	if x != nil {
+		return x.IsCancellation
+	}
+	return false
 }
 
 type CompleteTaskRequest struct {
@@ -454,28 +462,27 @@ func (x *CompleteTaskResponse) GetStopStream() bool {
 	return false
 }
 
-type PollTaskRequest struct {
+type CancelTaskRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	WorkerId      string                 `protobuf:"bytes,1,opt,name=worker_id,json=workerId,proto3" json:"worker_id,omitempty"`
-	TaskTypes     []string               `protobuf:"bytes,2,rep,name=task_types,json=taskTypes,proto3" json:"task_types,omitempty"`
+	TaskId        string                 `protobuf:"bytes,1,opt,name=task_id,json=taskId,proto3" json:"task_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *PollTaskRequest) Reset() {
-	*x = PollTaskRequest{}
+func (x *CancelTaskRequest) Reset() {
+	*x = CancelTaskRequest{}
 	mi := &file_api_proto_v1_orchestrator_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *PollTaskRequest) String() string {
+func (x *CancelTaskRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*PollTaskRequest) ProtoMessage() {}
+func (*CancelTaskRequest) ProtoMessage() {}
 
-func (x *PollTaskRequest) ProtoReflect() protoreflect.Message {
+func (x *CancelTaskRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_api_proto_v1_orchestrator_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -487,83 +494,60 @@ func (x *PollTaskRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use PollTaskRequest.ProtoReflect.Descriptor instead.
-func (*PollTaskRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use CancelTaskRequest.ProtoReflect.Descriptor instead.
+func (*CancelTaskRequest) Descriptor() ([]byte, []int) {
 	return file_api_proto_v1_orchestrator_proto_rawDescGZIP(), []int{8}
 }
 
-func (x *PollTaskRequest) GetWorkerId() string {
-	if x != nil {
-		return x.WorkerId
-	}
-	return ""
-}
-
-func (x *PollTaskRequest) GetTaskTypes() []string {
-	if x != nil {
-		return x.TaskTypes
-	}
-	return nil
-}
-
-type PollTaskResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	TaskId        string                 `protobuf:"bytes,1,opt,name=task_id,json=taskId,proto3" json:"task_id,omitempty"`
-	Type          string                 `protobuf:"bytes,2,opt,name=type,proto3" json:"type,omitempty"`
-	Payload       []byte                 `protobuf:"bytes,3,opt,name=payload,proto3" json:"payload,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *PollTaskResponse) Reset() {
-	*x = PollTaskResponse{}
-	mi := &file_api_proto_v1_orchestrator_proto_msgTypes[9]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *PollTaskResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*PollTaskResponse) ProtoMessage() {}
-
-func (x *PollTaskResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_v1_orchestrator_proto_msgTypes[9]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use PollTaskResponse.ProtoReflect.Descriptor instead.
-func (*PollTaskResponse) Descriptor() ([]byte, []int) {
-	return file_api_proto_v1_orchestrator_proto_rawDescGZIP(), []int{9}
-}
-
-func (x *PollTaskResponse) GetTaskId() string {
+func (x *CancelTaskRequest) GetTaskId() string {
 	if x != nil {
 		return x.TaskId
 	}
 	return ""
 }
 
-func (x *PollTaskResponse) GetType() string {
-	if x != nil {
-		return x.Type
-	}
-	return ""
+type CancelTaskResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
-func (x *PollTaskResponse) GetPayload() []byte {
+func (x *CancelTaskResponse) Reset() {
+	*x = CancelTaskResponse{}
+	mi := &file_api_proto_v1_orchestrator_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CancelTaskResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CancelTaskResponse) ProtoMessage() {}
+
+func (x *CancelTaskResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_api_proto_v1_orchestrator_proto_msgTypes[9]
 	if x != nil {
-		return x.Payload
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
 	}
-	return nil
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CancelTaskResponse.ProtoReflect.Descriptor instead.
+func (*CancelTaskResponse) Descriptor() ([]byte, []int) {
+	return file_api_proto_v1_orchestrator_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *CancelTaskResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
 }
 
 var File_api_proto_v1_orchestrator_proto protoreflect.FileDescriptor
@@ -585,11 +569,12 @@ const file_api_proto_v1_orchestrator_proto_rawDesc = "" +
 	"\x16RegisterWorkerResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\"1\n" +
 	"\x12StreamTasksRequest\x12\x1b\n" +
-	"\tworker_id\x18\x01 \x01(\tR\bworkerId\"Y\n" +
+	"\tworker_id\x18\x01 \x01(\tR\bworkerId\"\x82\x01\n" +
 	"\tTaskEvent\x12\x17\n" +
 	"\atask_id\x18\x01 \x01(\tR\x06taskId\x12\x19\n" +
 	"\bjob_type\x18\x02 \x01(\tR\ajobType\x12\x18\n" +
-	"\apayload\x18\x03 \x01(\fR\apayload\"\x88\x01\n" +
+	"\apayload\x18\x03 \x01(\fR\apayload\x12'\n" +
+	"\x0fis_cancellation\x18\x04 \x01(\bR\x0eisCancellation\"\x88\x01\n" +
 	"\x13CompleteTaskRequest\x12\x17\n" +
 	"\atask_id\x18\x01 \x01(\tR\x06taskId\x12\x1b\n" +
 	"\tworker_id\x18\x02 \x01(\tR\bworkerId\x12#\n" +
@@ -597,22 +582,19 @@ const file_api_proto_v1_orchestrator_proto_rawDesc = "" +
 	"\x06result\x18\x04 \x01(\fR\x06result\"7\n" +
 	"\x14CompleteTaskResponse\x12\x1f\n" +
 	"\vstop_stream\x18\x01 \x01(\bR\n" +
-	"stopStream\"M\n" +
-	"\x0fPollTaskRequest\x12\x1b\n" +
-	"\tworker_id\x18\x01 \x01(\tR\bworkerId\x12\x1d\n" +
-	"\n" +
-	"task_types\x18\x02 \x03(\tR\ttaskTypes\"Y\n" +
-	"\x10PollTaskResponse\x12\x17\n" +
-	"\atask_id\x18\x01 \x01(\tR\x06taskId\x12\x12\n" +
-	"\x04type\x18\x02 \x01(\tR\x04type\x12\x18\n" +
-	"\apayload\x18\x03 \x01(\fR\apayload2\xee\x02\n" +
+	"stopStream\",\n" +
+	"\x11CancelTaskRequest\x12\x17\n" +
+	"\atask_id\x18\x01 \x01(\tR\x06taskId\".\n" +
+	"\x12CancelTaskResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess2\xf4\x02\n" +
 	"\fOrchestrator\x12C\n" +
 	"\n" +
 	"SubmitTask\x12\x19.api.v1.SubmitTaskRequest\x1a\x1a.api.v1.SubmitTaskResponse\x12O\n" +
 	"\x0eRegisterWorker\x12\x1d.api.v1.RegisterWorkerRequest\x1a\x1e.api.v1.RegisterWorkerResponse\x12>\n" +
 	"\vStreamTasks\x12\x1a.api.v1.StreamTasksRequest\x1a\x11.api.v1.TaskEvent0\x01\x12I\n" +
-	"\fCompleteTask\x12\x1b.api.v1.CompleteTaskRequest\x1a\x1c.api.v1.CompleteTaskResponse\x12=\n" +
-	"\bPollTask\x12\x17.api.v1.PollTaskRequest\x1a\x18.api.v1.PollTaskResponseB1Z/github.com/manenim/task-orchestrator/pkg/api/v1b\x06proto3"
+	"\fCompleteTask\x12\x1b.api.v1.CompleteTaskRequest\x1a\x1c.api.v1.CompleteTaskResponse\x12C\n" +
+	"\n" +
+	"CancelTask\x12\x19.api.v1.CancelTaskRequest\x1a\x1a.api.v1.CancelTaskResponseB1Z/github.com/manenim/task-orchestrator/pkg/api/v1b\x06proto3"
 
 var (
 	file_api_proto_v1_orchestrator_proto_rawDescOnce sync.Once
@@ -636,8 +618,8 @@ var file_api_proto_v1_orchestrator_proto_goTypes = []any{
 	(*TaskEvent)(nil),              // 5: api.v1.TaskEvent
 	(*CompleteTaskRequest)(nil),    // 6: api.v1.CompleteTaskRequest
 	(*CompleteTaskResponse)(nil),   // 7: api.v1.CompleteTaskResponse
-	(*PollTaskRequest)(nil),        // 8: api.v1.PollTaskRequest
-	(*PollTaskResponse)(nil),       // 9: api.v1.PollTaskResponse
+	(*CancelTaskRequest)(nil),      // 8: api.v1.CancelTaskRequest
+	(*CancelTaskResponse)(nil),     // 9: api.v1.CancelTaskResponse
 	(*timestamppb.Timestamp)(nil),  // 10: google.protobuf.Timestamp
 }
 var file_api_proto_v1_orchestrator_proto_depIdxs = []int32{
@@ -646,12 +628,12 @@ var file_api_proto_v1_orchestrator_proto_depIdxs = []int32{
 	2,  // 2: api.v1.Orchestrator.RegisterWorker:input_type -> api.v1.RegisterWorkerRequest
 	4,  // 3: api.v1.Orchestrator.StreamTasks:input_type -> api.v1.StreamTasksRequest
 	6,  // 4: api.v1.Orchestrator.CompleteTask:input_type -> api.v1.CompleteTaskRequest
-	8,  // 5: api.v1.Orchestrator.PollTask:input_type -> api.v1.PollTaskRequest
+	8,  // 5: api.v1.Orchestrator.CancelTask:input_type -> api.v1.CancelTaskRequest
 	1,  // 6: api.v1.Orchestrator.SubmitTask:output_type -> api.v1.SubmitTaskResponse
 	3,  // 7: api.v1.Orchestrator.RegisterWorker:output_type -> api.v1.RegisterWorkerResponse
 	5,  // 8: api.v1.Orchestrator.StreamTasks:output_type -> api.v1.TaskEvent
 	7,  // 9: api.v1.Orchestrator.CompleteTask:output_type -> api.v1.CompleteTaskResponse
-	9,  // 10: api.v1.Orchestrator.PollTask:output_type -> api.v1.PollTaskResponse
+	9,  // 10: api.v1.Orchestrator.CancelTask:output_type -> api.v1.CancelTaskResponse
 	6,  // [6:11] is the sub-list for method output_type
 	1,  // [1:6] is the sub-list for method input_type
 	1,  // [1:1] is the sub-list for extension type_name

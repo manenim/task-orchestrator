@@ -12,13 +12,15 @@ type Dispatcher struct {
 	workerManager *WorkerManager
 	logger        port.Logger
 	taskQueue     <-chan *domain.Task
+	repo          port.TaskRepository
 }
 
-func NewDispatcher(wm *WorkerManager, taskQueue <-chan *domain.Task, logger port.Logger) *Dispatcher {
+func NewDispatcher(wm *WorkerManager, taskQueue <-chan *domain.Task, logger port.Logger, repo port.TaskRepository) *Dispatcher {
 	return &Dispatcher{
 		workerManager: wm,
 		taskQueue:     taskQueue,
 		logger:        logger,
+		repo:          repo,
 	}
 }
 
@@ -30,17 +32,22 @@ func (d *Dispatcher) Run(ctx context.Context) {
 			return
 
 		case task := <-d.taskQueue:
-			d.dispatch(task)
+			d.dispatch(ctx, task)
 		}
 
 	}
 
 }
 
-func (d *Dispatcher) dispatch(task *domain.Task) {
-	stream, err := d.workerManager.GetNextWorker()
+func (d *Dispatcher) dispatch(ctx context.Context, task *domain.Task) {
+	stream, workerID, err := d.workerManager.GetNextWorker()
 	if err != nil {
 		d.logger.Error("No worker available to dispatch task", err)
+		return
+	}
+	task.WorkerID = workerID
+	if err := d.repo.Update(ctx, task); err != nil {
+		d.logger.Error("Failed to update task worker ID", err)
 		return
 	}
 	event := &pb.TaskEvent{

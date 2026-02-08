@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"log"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -14,6 +15,7 @@ import (
 )
 
 func main() {
+
 	workerID := "worker-" + uuid.New().String()
 	logger, err := zap.New()
 	if err != nil {
@@ -30,40 +32,17 @@ func main() {
 	client := pb.NewOrchestratorClient(conn)
 	for {
 		if err := stream(client, workerID, logger); err != nil {
-			logger.Error("Poll error:", err)
+			logger.Error("streaming error:", err)
+			time.Sleep(5 * time.Second)
 			continue
 		}
 	}
 
 }
 
-// for polling (in-efficient)
-// func poll(client pb.OrchestratorClient, workerID string, logger port.Logger) error {
-// 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-// 	defer cancel()
-// 	resp, err := client.PollTask(ctx, &pb.PollTaskRequest{
-// 		WorkerId:  workerID,
-// 		TaskTypes: []string{"any"},
-// 	})
-
-// 	if err != nil {
-// 		return err
-// 	}
-// 	if resp.TaskId == "" {
-// 		logger.Info("No tasks found. Sleeping...")
-// 		time.Sleep(1 * time.Second)
-// 		return nil
-// 	}
-
-// 	logger.Info("Received Task: ", port.String("TaskID", resp.TaskId), port.String("Type", resp.Type))
-
-// 	logger.Info("Executing task ...", port.String("Type", resp.Type))
-// 	time.Sleep(2 * time.Second)
-// 	logger.Info("Task Completed!", port.String("TaskID", resp.TaskId))
-// 	return nil
-// }
-
 func stream(client pb.OrchestratorClient, workerID string, logger port.Logger) error {
+	runningTasks := make(map[string]context.CancelFunc)
+	var mu sync.Mutex
 	stream, err := client.StreamTasks(context.Background(), &pb.StreamTasksRequest{WorkerId: workerID})
 	if err != nil {
 		return err
@@ -75,10 +54,36 @@ func stream(client pb.OrchestratorClient, workerID string, logger port.Logger) e
 		if err != nil {
 			return err
 		}
-		logger.Info("Received Task!", port.String("task_id", event.TaskId), port.String("type", event.JobType))
-		// ... Executing task (emulated) ...
-		time.Sleep(2 * time.Second)
-		logger.Info("Task Completed!", port.String("task_id", event.TaskId))
 
+		if event.IsCancellation {
+			mu.Lock()
+			if cancel, exists := runningTasks[event.TaskId]; exists {
+				cancel()
+				delete(runningTasks, event.TaskId)
+				logger.Info("Cancelled task", port.String("task_id", event.TaskId))
+			}
+			mu.Unlock()
+			continue
+		}
+
+		ctx, cancel := context.WithCancel(context.Background())
+		mu.Lock()
+		runningTasks[event.TaskId] = cancel
+		mu.Unlock()
+		go func(taskID string, taskCtx context.Context) {
+			defer func() {
+				mu.Lock()
+				delete(runningTasks, taskID)
+				mu.Unlock()
+			}()
+			logger.Info("Starting task...", port.String("task_id", taskID))
+
+			select {
+			case <-time.After(5 * time.Second):
+				logger.Info("Task Completed!", port.String("task_id", taskID))
+			case <-taskCtx.Done():
+				logger.Info("Task Aborted by Cancellation!", port.String("task_id", taskID))
+			}
+		}(event.TaskId, ctx)
 	}
 }

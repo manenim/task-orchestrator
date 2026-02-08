@@ -23,7 +23,7 @@ const (
 	Orchestrator_RegisterWorker_FullMethodName = "/api.v1.Orchestrator/RegisterWorker"
 	Orchestrator_StreamTasks_FullMethodName    = "/api.v1.Orchestrator/StreamTasks"
 	Orchestrator_CompleteTask_FullMethodName   = "/api.v1.Orchestrator/CompleteTask"
-	Orchestrator_PollTask_FullMethodName       = "/api.v1.Orchestrator/PollTask"
+	Orchestrator_CancelTask_FullMethodName     = "/api.v1.Orchestrator/CancelTask"
 )
 
 // OrchestratorClient is the client API for Orchestrator service.
@@ -34,7 +34,7 @@ type OrchestratorClient interface {
 	RegisterWorker(ctx context.Context, in *RegisterWorkerRequest, opts ...grpc.CallOption) (*RegisterWorkerResponse, error)
 	StreamTasks(ctx context.Context, in *StreamTasksRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[TaskEvent], error)
 	CompleteTask(ctx context.Context, in *CompleteTaskRequest, opts ...grpc.CallOption) (*CompleteTaskResponse, error)
-	PollTask(ctx context.Context, in *PollTaskRequest, opts ...grpc.CallOption) (*PollTaskResponse, error)
+	CancelTask(ctx context.Context, in *CancelTaskRequest, opts ...grpc.CallOption) (*CancelTaskResponse, error)
 }
 
 type orchestratorClient struct {
@@ -94,10 +94,10 @@ func (c *orchestratorClient) CompleteTask(ctx context.Context, in *CompleteTaskR
 	return out, nil
 }
 
-func (c *orchestratorClient) PollTask(ctx context.Context, in *PollTaskRequest, opts ...grpc.CallOption) (*PollTaskResponse, error) {
+func (c *orchestratorClient) CancelTask(ctx context.Context, in *CancelTaskRequest, opts ...grpc.CallOption) (*CancelTaskResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(PollTaskResponse)
-	err := c.cc.Invoke(ctx, Orchestrator_PollTask_FullMethodName, in, out, cOpts...)
+	out := new(CancelTaskResponse)
+	err := c.cc.Invoke(ctx, Orchestrator_CancelTask_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -112,7 +112,7 @@ type OrchestratorServer interface {
 	RegisterWorker(context.Context, *RegisterWorkerRequest) (*RegisterWorkerResponse, error)
 	StreamTasks(*StreamTasksRequest, grpc.ServerStreamingServer[TaskEvent]) error
 	CompleteTask(context.Context, *CompleteTaskRequest) (*CompleteTaskResponse, error)
-	PollTask(context.Context, *PollTaskRequest) (*PollTaskResponse, error)
+	CancelTask(context.Context, *CancelTaskRequest) (*CancelTaskResponse, error)
 	mustEmbedUnimplementedOrchestratorServer()
 }
 
@@ -135,8 +135,8 @@ func (UnimplementedOrchestratorServer) StreamTasks(*StreamTasksRequest, grpc.Ser
 func (UnimplementedOrchestratorServer) CompleteTask(context.Context, *CompleteTaskRequest) (*CompleteTaskResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method CompleteTask not implemented")
 }
-func (UnimplementedOrchestratorServer) PollTask(context.Context, *PollTaskRequest) (*PollTaskResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method PollTask not implemented")
+func (UnimplementedOrchestratorServer) CancelTask(context.Context, *CancelTaskRequest) (*CancelTaskResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method CancelTask not implemented")
 }
 func (UnimplementedOrchestratorServer) mustEmbedUnimplementedOrchestratorServer() {}
 func (UnimplementedOrchestratorServer) testEmbeddedByValue()                      {}
@@ -224,20 +224,20 @@ func _Orchestrator_CompleteTask_Handler(srv interface{}, ctx context.Context, de
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Orchestrator_PollTask_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(PollTaskRequest)
+func _Orchestrator_CancelTask_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CancelTaskRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(OrchestratorServer).PollTask(ctx, in)
+		return srv.(OrchestratorServer).CancelTask(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: Orchestrator_PollTask_FullMethodName,
+		FullMethod: Orchestrator_CancelTask_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(OrchestratorServer).PollTask(ctx, req.(*PollTaskRequest))
+		return srv.(OrchestratorServer).CancelTask(ctx, req.(*CancelTaskRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -262,8 +262,8 @@ var Orchestrator_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _Orchestrator_CompleteTask_Handler,
 		},
 		{
-			MethodName: "PollTask",
-			Handler:    _Orchestrator_PollTask_Handler,
+			MethodName: "CancelTask",
+			Handler:    _Orchestrator_CancelTask_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

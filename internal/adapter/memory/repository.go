@@ -67,20 +67,21 @@ func (r *InMemoryTaskRepository) Update(ctx context.Context, t *domain.Task) err
 	return nil
 }
 
-func (r *InMemoryTaskRepository) AcquireTask(ctx context.Context, workerID string, taskTypes []string) (*domain.Task, error) {
+func (r *InMemoryTaskRepository) ReleaseTasks(workerID string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-
+	
 	for _, task := range r.store {
-		if task.State == domain.Scheduled {
-			err := task.UpdateState(domain.Running)
-			if err != nil {
-				r.logger.Error("Failed to update task", err)
-				continue
-			}
-			task.WorkerID = workerID
-			return task, nil
-		}
-	}
-	return nil, nil
+        if task.WorkerID == workerID && (task.State == domain.Running || task.State == domain.Scheduled) {
+            
+            if err := task.UpdateState(domain.Pending); err != nil {
+                r.logger.Error("Failed to release task", err, port.String("task_id", task.ID))
+                continue 
+            }
+            task.WorkerID = ""
+            r.logger.Info("Released task from dead worker", port.String("task_id", task.ID), port.String("worker_id", workerID))
+        }
+    }
+
+	return nil
 }

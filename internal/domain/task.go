@@ -12,6 +12,7 @@ const (
 	Running   TaskState = "RUNNING"
 	Completed TaskState = "COMPLETED"
 	Failed    TaskState = "FAILED"
+	Cancelled TaskState = "CANCELLED"
 )
 
 type Task struct {
@@ -45,7 +46,15 @@ func NewTask(id, clientID, taskType string, payload []byte, runAt time.Time) *Ta
 }
 
 func (t *Task) ValidateTransition(target TaskState) error {
-	if t.State == Completed || t.State == Failed {
+
+	if target == Cancelled {
+		if t.State == Completed || t.State == Failed || t.State == Cancelled {
+			return ErrTaskFinalized
+		}
+		return nil
+	}
+
+	if t.State == Completed || t.State == Failed || t.State == Cancelled {
 		return ErrTaskFinalized
 	}
 
@@ -59,7 +68,7 @@ func (t *Task) ValidateTransition(target TaskState) error {
 			return ErrInvalidTransition
 		}
 	case Running:
-		if target != Pending && target != Failed && target != Completed {
+		if target != Pending && target != Failed && target != Completed && target != Cancelled {
 			return ErrInvalidTransition
 		}
 	}

@@ -36,7 +36,7 @@ func run() error {
 	taskRepo := memory.New(logger)
 	taskQueue := make(chan *domain.Task, taskQueueBufferSize)
 	workerManger := service.NewWorkerManager(logger)
-	dispatcher := service.NewDispatcher(workerManger, taskQueue, logger)
+	dispatcher := service.NewDispatcher(workerManger, taskQueue, logger, taskRepo)
 	taskService := service.New(taskRepo, logger, workerManger)
 	stateMgr := service.NewStateManager(taskRepo, logger, batchSize, taskQueue)
 	go stateMgr.Run(context.Background())
