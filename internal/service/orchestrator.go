@@ -98,13 +98,12 @@ func (s *Orchestrator) CancelTask(ctx context.Context, req *pb.CancelTaskRequest
 	return &pb.CancelTaskResponse{Success: true}, nil
 }
 
-
 func (s *Orchestrator) CompleteTask(ctx context.Context, req *pb.CompleteTaskRequest) (*pb.CompleteTaskResponse, error) {
 	task, err := s.repo.Get(ctx, req.TaskId)
 	if err != nil {
 		return nil, s.statusFromError(err)
 	}
-	
+
 	task.WorkerID = ""
 
 	if req.ErrorMessage != "" {
@@ -134,6 +133,9 @@ func (s *Orchestrator) CompleteTask(ctx context.Context, req *pb.CompleteTaskReq
 	if err := s.repo.Update(ctx, task); err != nil {
 		return nil, s.statusFromError(err)
 	}
+
+	s.workerManager.DecrementActiveTasks(req.WorkerId)
+
 	return &pb.CompleteTaskResponse{StopStream: false}, nil
 }
 

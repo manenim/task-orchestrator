@@ -70,18 +70,18 @@ func (r *InMemoryTaskRepository) Update(ctx context.Context, t *domain.Task) err
 func (r *InMemoryTaskRepository) ReleaseTasks(workerID string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	
+
 	for _, task := range r.store {
-        if task.WorkerID == workerID && (task.State == domain.Running || task.State == domain.Scheduled) {
-            
-            if err := task.UpdateState(domain.Pending); err != nil {
-                r.logger.Error("Failed to release task", err, port.String("task_id", task.ID))
-                continue 
-            }
-            task.WorkerID = ""
-            r.logger.Info("Released task from dead worker", port.String("task_id", task.ID), port.String("worker_id", workerID))
-        }
-    }
+		if task.WorkerID == workerID && (task.State == domain.Running || task.State == domain.Scheduled) {
+
+			if err := task.UpdateState(domain.Pending); err != nil {
+				r.logger.Error("Failed to release task", err, port.String("task_id", task.ID))
+				continue
+			}
+			task.WorkerID = ""
+			r.logger.Info("Released task from dead worker", port.String("task_id", task.ID), port.String("worker_id", workerID))
+		}
+	}
 
 	return nil
 }

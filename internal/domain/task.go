@@ -16,20 +16,20 @@ const (
 )
 
 type Task struct {
-	ID        string
-	Type      string
-	Payload   []byte
-	Result    []byte
-	State     TaskState
-	RunAt     time.Time
-	Version   int
-	WorkerID  string
-	ClientID  string
-	RetryCount int
-	MaxRetries int
+	ID           string
+	Type         string
+	Payload      []byte
+	Result       []byte
+	State        TaskState
+	RunAt        time.Time
+	Version      int
+	WorkerID     string
+	ClientID     string
+	RetryCount   int
+	MaxRetries   int
 	LastFailedAt time.Time
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
 }
 
 func NewTask(id, clientID, taskType string, payload []byte, runAt time.Time) *Task {
@@ -37,16 +37,16 @@ func NewTask(id, clientID, taskType string, payload []byte, runAt time.Time) *Ta
 		runAt = time.Now().UTC()
 	}
 	return &Task{
-		ID:        id,
-		ClientID:  clientID,
-		Type:      taskType,
-		Payload:   payload,
-		State:     Pending,
-		RunAt:     runAt,
-		Version:   1,
+		ID:         id,
+		ClientID:   clientID,
+		Type:       taskType,
+		Payload:    payload,
+		State:      Pending,
+		RunAt:      runAt,
+		Version:    1,
 		MaxRetries: 3,
-		CreatedAt: time.Now().UTC(),
-		UpdatedAt: time.Now().UTC(),
+		CreatedAt:  time.Now().UTC(),
+		UpdatedAt:  time.Now().UTC(),
 	}
 }
 

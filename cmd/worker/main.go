@@ -5,7 +5,10 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
+	"os"
+	"os/signal"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/google/uuid"
@@ -18,6 +21,11 @@ import (
 
 func main() {
 
+
+	 ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+    defer stop()
+
+	
 	workerID := "worker-" + uuid.New().String()
 	logger, err := zap.New()
 	if err != nil {
@@ -34,24 +42,45 @@ func main() {
 	client := pb.NewOrchestratorClient(conn)
 
 	for {
-		if err := stream(client, workerID, logger); err != nil {
-			logger.Error("streaming error:", err)
-			time.Sleep(5 * time.Second)
-			continue
+		if err := stream(ctx, client, workerID, logger); err != nil {
+			 if ctx.Err() != nil {
+                     return 
+                }
+                logger.Error("streaming error:", err)
+                time.Sleep(5 * time.Second)
 		}
 	}
 
 }
 
-func stream(client pb.OrchestratorClient, workerID string, logger port.Logger) error {
+func stream(ctx context.Context, client pb.OrchestratorClient, workerID string, logger port.Logger) error {
 	runningTasks := make(map[string]context.CancelFunc)
 	var mu sync.Mutex
-	stream, err := client.StreamTasks(context.Background(), &pb.StreamTasksRequest{WorkerId: workerID})
+	  var wg sync.WaitGroup
+	      defer wg.Wait() 
+
+	streamCtx, cancelStream := context.WithCancel(context.Background())
+	defer cancelStream()
+
+	stream, err := client.StreamTasks(streamCtx, &pb.StreamTasksRequest{WorkerId: workerID})
 	if err != nil {
 		return err
 	}
 
 	logger.Info("Connected to Orchestrator, waiting for tasks...")
+
+	go func() {
+		select {
+		case <-ctx.Done(): 
+			logger.Info("Shutdown signal received. Waiting for active tasks...")
+			wg.Wait() 
+			cancelStream() 
+			logger.Info("All tasks finished. Closing stream.")
+		case <-streamCtx.Done(): 
+			
+		}
+	}()
+
 	for {
 		event, err := stream.Recv()
 		if err != nil {
@@ -73,7 +102,9 @@ func stream(client pb.OrchestratorClient, workerID string, logger port.Logger) e
 		mu.Lock()
 		runningTasks[event.TaskId] = cancel
 		mu.Unlock()
-		go func(taskID string, taskType string, taskCtx context.Context) {
+		wg.Add(1)
+        go func(taskID, taskType string, taskCtx context.Context) {
+            defer wg.Done()
 			defer func() {
 				mu.Lock()
 				delete(runningTasks, taskID)
@@ -114,8 +145,11 @@ func stream(client pb.OrchestratorClient, workerID string, logger port.Logger) e
 	}
 }
 
-
 func processTask(taskType string) (result string, err error, isRetryable bool) {
+	if taskType == "slow_job" {
+		time.Sleep(10 * time.Second)
+		return "I took my time", nil, false
+	}
 	if taskType == "unstable_job" {
 		r := rand.Intn(100)
 		if r > 30 && r <= 70 {

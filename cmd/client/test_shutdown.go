@@ -18,18 +18,18 @@ func main() {
 	defer conn.Close()
 	client := pb.NewOrchestratorClient(conn)
 
-	// Submit Unstable Task
+	// Submit Slow Task
 	taskID := uuid.New().String()
-	log.Printf("Submitting Unstable Task: %s", taskID)
-
+	log.Printf("Submitting Slow Task: %s", taskID)
+	
 	_, err = client.SubmitTask(context.Background(), &pb.SubmitTaskRequest{
 		TaskId:     taskID,
-		Type:       "unstable_job",
-		MaxRetries: 3, // Retry up to 3 times
+		Type:       "slow_job",
+		MaxRetries: 3, 
 	})
 	if err != nil {
 		log.Fatalf("Failed to submit task: %v", err)
 	}
 
-	log.Println("✅ Task Submitted! Check Server/Worker logs for Retries/Failure.")
+	log.Println("✅ Slow Task Submitted! Kill the worker now (Ctrl+C) and watch it wait!")
 }

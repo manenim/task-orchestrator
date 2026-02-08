@@ -2,6 +2,7 @@ package service
 
 import (
 	"fmt"
+	"math"
 	"sync"
 
 	"github.com/manenim/task-orchestrator/internal/port"
@@ -19,17 +20,21 @@ func (s *SafeStream) Send(event *pb.TaskEvent) error {
 	return s.stream.Send(event)
 }
 
+type WorkerState struct {
+	Stream      *SafeStream
+	ActiveTasks int
+}
+
 type WorkerManager struct {
 	mu        sync.RWMutex
-	workers   map[string]*SafeStream
+	workers   map[string]*WorkerState
 	workerIDs []string
-	rrIndex   int
 	logger    port.Logger
 }
 
 func NewWorkerManager(logger port.Logger) *WorkerManager {
 	return &WorkerManager{
-		workers:   make(map[string]*SafeStream),
+		workers:   make(map[string]*WorkerState),
 		workerIDs: make([]string, 0),
 		logger:    logger,
 	}
@@ -43,8 +48,11 @@ func (w *WorkerManager) Add(id string, stream pb.Orchestrator_StreamTasksServer)
 		return fmt.Errorf("worker with ID %q is already connected", id)
 	}
 
-	w.workers[id] = &SafeStream{
-		stream: stream,
+	w.workers[id] = &WorkerState{
+		Stream: &SafeStream{
+			stream: stream,
+		},
+		ActiveTasks: 0,
 	}
 	w.workerIDs = append(w.workerIDs, id)
 
@@ -65,9 +73,6 @@ func (w *WorkerManager) Remove(id string) error {
 	for i, wID := range w.workerIDs {
 		if wID == id {
 			w.workerIDs = append(w.workerIDs[:i], w.workerIDs[i+1:]...)
-			if w.rrIndex >= i && w.rrIndex > 0 {
-				w.rrIndex--
-			}
 			break
 		}
 	}
@@ -84,21 +89,48 @@ func (w *WorkerManager) GetNextWorker() (*SafeStream, string, error) {
 		return nil, "", fmt.Errorf("no active workers available to accept tasks")
 	}
 
-	w.rrIndex = (w.rrIndex + 1) % len(w.workerIDs)
-	workerID := w.workerIDs[w.rrIndex]
+	var selectedWorkerID string
+	minActiveTasks := math.MaxInt
 
-	stream, exists := w.workers[workerID]
-	if !exists {
-		return nil, "", fmt.Errorf("internal inconsistency: worker ID %q found in list but missing from map", workerID)
+	for _, id := range w.workerIDs {
+		state, exists := w.workers[id]
+		if !exists {
+			continue 
+		}
+		if state.ActiveTasks < minActiveTasks {
+			minActiveTasks = state.ActiveTasks
+			selectedWorkerID = id
+		}
 	}
 
-	return stream, workerID, nil
+	if selectedWorkerID == "" {
+		selectedWorkerID = w.workerIDs[0]
+	}
+
+	w.workers[selectedWorkerID].ActiveTasks++
+	w.logger.Info("Worker Selected (Least Connections)",
+		port.String("worker_id", selectedWorkerID),
+		port.Int("active_tasks", w.workers[selectedWorkerID].ActiveTasks))
+
+	return w.workers[selectedWorkerID].Stream, selectedWorkerID, nil
+}
+
+func (w *WorkerManager) DecrementActiveTasks(workerID string) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	if state, exists := w.workers[workerID]; exists {
+		if state.ActiveTasks > 0 {
+			state.ActiveTasks--
+			w.logger.Info("Worker Task Completed", port.String("worker_id", workerID), port.Int("active_tasks", state.ActiveTasks))
+		}
+	}
 }
 
 func (w *WorkerManager) CancelTask(workerID string, taskID string) error {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
-	workerStream, exists := w.workers[workerID]
+	workerState, exists := w.workers[workerID]
 
 	if !exists {
 		return fmt.Errorf("worker %s not found", workerID)
@@ -107,7 +139,7 @@ func (w *WorkerManager) CancelTask(workerID string, taskID string) error {
 		TaskId:         taskID,
 		IsCancellation: true,
 	}
-	if err := workerStream.Send(event); err != nil {
+	if err := workerState.Stream.Send(event); err != nil {
 		return fmt.Errorf("failed to send cancel event: %w", err)
 	}
 
