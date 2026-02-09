@@ -18,9 +18,9 @@ func TestInMemoryTaskRepository_ListEligible(t *testing.T) {
 	past := now.Add(-1 * time.Hour)
 
 	tasks := []*domain.Task{
-		domain.NewTask("1", "test-client", "immediate", nil, past),
-		domain.NewTask("2", "test-client", "future", nil, future),
-		domain.NewTask("3", "test-client", "immediate_2", nil, past),
+		domain.NewTask("1", "test-client", "immediate", nil, past, 0),
+		domain.NewTask("2", "test-client", "future", nil, future, 0),
+		domain.NewTask("3", "test-client", "immediate_2", nil, past, 0),
 	}
 
 	tasks[2].State = domain.Completed
