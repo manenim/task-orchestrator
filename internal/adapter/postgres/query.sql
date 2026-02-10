@@ -8,9 +8,11 @@ INSERT INTO tasks (
     $7, $8, $9, $10, 
     $11, $12, $13, $14
 );
+
 -- name: GetTask :one
 SELECT * FROM tasks
 WHERE id = $1 LIMIT 1;
+
 -- name: UpdateTask :exec
 UPDATE tasks
 SET 
@@ -22,12 +24,14 @@ SET
     run_at = $7,
     updated_at = NOW()
 WHERE id = $1;
+
 -- name: ListEligibleTasks :many
 SELECT * FROM tasks
 WHERE state IN ('PENDING', 'SCHEDULED')
   AND run_at <= $1
 ORDER BY run_at ASC
 LIMIT $2;
+
 -- name: ReleaseTasks :exec
 UPDATE tasks
 SET 

@@ -61,7 +61,8 @@ func (s *Orchestrator) StreamTasks(req *pb.StreamTasksRequest, stream pb.Orchest
 		if err := s.workerManager.Remove(req.WorkerId); err != nil {
 			s.logger.Error("Failed to remove worker", err)
 		}
-		s.repo.ReleaseTasks(req.WorkerId)
+		// TODO: Use a proper timeout context for ReleaseTasks
+		_ = s.repo.ReleaseTasks(context.Background(), req.WorkerId)
 	}()
 
 	<-stream.Context().Done()

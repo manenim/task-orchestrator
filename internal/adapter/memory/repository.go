@@ -67,7 +67,7 @@ func (r *InMemoryTaskRepository) Update(ctx context.Context, t *domain.Task) err
 	return nil
 }
 
-func (r *InMemoryTaskRepository) ReleaseTasks(workerID string) error {
+func (r *InMemoryTaskRepository) ReleaseTasks(ctx context.Context, workerID string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
