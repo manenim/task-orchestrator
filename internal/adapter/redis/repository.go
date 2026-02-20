@@ -54,7 +54,6 @@ func (r *RedisTaskRepository) Get(ctx context.Context, id string) (*domain.Task,
 	return unmarshalTask([]byte(val))
 }
 
-
 func (r *RedisTaskRepository) Update(ctx context.Context, task *domain.Task) error {
 	data, err := marshalTask(task)
 	if err != nil {
@@ -145,7 +144,7 @@ func (r *RedisTaskRepository) ReleaseTasks(ctx context.Context, workerID string)
 			task.UpdatedAt = time.Now().UTC()
 
 			if err := r.Update(ctx, task); err != nil {
-				r.logger.Error("failded to update", err, port.String("taskID", task.ID))
+				r.logger.Error("failed to update", err, port.String("taskID", task.ID))
 			}
 		}
 	}
@@ -153,4 +152,8 @@ func (r *RedisTaskRepository) ReleaseTasks(ctx context.Context, workerID string)
 	r.client.Del(ctx, workerTasksKey(workerID))
 
 	return nil
+}
+
+func (r *RedisTaskRepository) ListTasks(ctx context.Context, filter *domain.TaskFilter) ([]*domain.Task, error) {
+	return nil, fmt.Errorf("listing tasks is not supported with Redis storage yet; use Postgres for advanced filtering")
 }

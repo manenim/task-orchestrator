@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	scheduleKey = "tasks:schedule"
+	scheduleKey   = "tasks:schedule"
 	taskKeyPrefix = "task:"
 )
 
@@ -31,7 +31,7 @@ func unmarshalTask(data []byte) (*domain.Task, error) {
 	if err := json.Unmarshal(data, &task); err != nil {
 		return nil, err
 	}
-	
+
 	task.RunAt = task.RunAt.UTC()
 	task.CreatedAt = task.CreatedAt.UTC()
 	task.UpdatedAt = task.UpdatedAt.UTC()

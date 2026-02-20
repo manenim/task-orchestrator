@@ -13,4 +13,5 @@ type TaskRepository interface {
 	Update(ctx context.Context, task *domain.Task) error
 	ListEligible(ctx context.Context, now time.Time, limit int) ([]*domain.Task, error)
 	ReleaseTasks(ctx context.Context, workerID string) error
+	ListTasks(ctx context.Context, filter *domain.TaskFilter) ([]*domain.Task, error)
 }

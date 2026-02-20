@@ -7,6 +7,7 @@ import (
 
 	"github.com/manenim/task-orchestrator/internal/domain"
 	"github.com/manenim/task-orchestrator/internal/port"
+	orchestratorv1 "github.com/manenim/task-orchestrator/pkg/api/orchestrator/v1"
 	pb "github.com/manenim/task-orchestrator/pkg/api/v1"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -17,13 +18,15 @@ type Orchestrator struct {
 	repo          port.TaskRepository
 	logger        port.Logger
 	workerManager *WorkerManager
+	publisher     TaskStatePublisher
 }
 
-func New(repo port.TaskRepository, logger port.Logger, wm *WorkerManager) *Orchestrator {
+func New(repo port.TaskRepository, logger port.Logger, wm *WorkerManager, publisher TaskStatePublisher) *Orchestrator {
 	return &Orchestrator{
 		repo:          repo,
 		logger:        logger,
 		workerManager: wm,
+		publisher:     publisher,
 	}
 }
 
@@ -45,6 +48,10 @@ func (s *Orchestrator) SubmitTask(ctx context.Context, req *pb.SubmitTaskRequest
 	if err := s.repo.Create(ctx, task); err != nil {
 		return nil, s.statusFromError(err)
 	}
+
+	if s.publisher != nil {
+		s.publisher.PublishTaskEvent(ctx, orchestratorv1.TaskEventType_TASK_EVENT_TYPE_CREATED, domain.TaskState(""), task, "task submitted")
+	}
 	s.logger.Info("Task Submitted", port.String("id", task.ID))
 
 	return &pb.SubmitTaskResponse{
@@ -61,7 +68,6 @@ func (s *Orchestrator) StreamTasks(req *pb.StreamTasksRequest, stream pb.Orchest
 		if err := s.workerManager.Remove(req.WorkerId); err != nil {
 			s.logger.Error("Failed to remove worker", err)
 		}
-		// TODO: Use a proper timeout context for ReleaseTasks
 		_ = s.repo.ReleaseTasks(context.Background(), req.WorkerId)
 	}()
 
@@ -78,6 +84,8 @@ func (s *Orchestrator) CancelTask(ctx context.Context, req *pb.CancelTaskRequest
 	if err != nil {
 		return nil, s.statusFromError(err)
 	}
+
+	previousState := task.State
 
 	if task.WorkerID != "" {
 		if err := s.workerManager.CancelTask(task.WorkerID, task.ID); err != nil {
@@ -96,6 +104,10 @@ func (s *Orchestrator) CancelTask(ctx context.Context, req *pb.CancelTaskRequest
 		return nil, s.statusFromError(err)
 	}
 
+	if s.publisher != nil {
+		s.publisher.PublishTaskEvent(ctx, orchestratorv1.TaskEventType_TASK_EVENT_TYPE_CANCEL_REQUESTED, previousState, task, "task cancelled")
+	}
+
 	return &pb.CancelTaskResponse{Success: true}, nil
 }
 
@@ -105,9 +117,15 @@ func (s *Orchestrator) CompleteTask(ctx context.Context, req *pb.CompleteTaskReq
 		return nil, s.statusFromError(err)
 	}
 
+	previousState := task.State
+	eventType := orchestratorv1.TaskEventType_TASK_EVENT_TYPE_STATE_CHANGED
+	eventReason := "task completed"
+
 	task.WorkerID = ""
 
 	if req.ErrorMessage != "" {
+		task.ErrorMessage = req.ErrorMessage
+		eventReason = req.ErrorMessage
 		s.logger.Info("Task failed", port.String("error", req.ErrorMessage))
 		if req.IsRetryable && task.RetryCount < task.MaxRetries {
 			task.RetryCount++
@@ -118,6 +136,7 @@ func (s *Orchestrator) CompleteTask(ctx context.Context, req *pb.CompleteTaskReq
 			if err := task.UpdateState(domain.Pending); err != nil {
 				return nil, s.statusFromError(err)
 			}
+			eventType = orchestratorv1.TaskEventType_TASK_EVENT_TYPE_RETRIED
 		} else {
 			task.LastFailedAt = time.Now()
 			if err := task.UpdateState(domain.Failed); err != nil {
@@ -125,6 +144,7 @@ func (s *Orchestrator) CompleteTask(ctx context.Context, req *pb.CompleteTaskReq
 			}
 		}
 	} else {
+		task.ErrorMessage = ""
 		task.Result = req.Result
 		if err := task.UpdateState(domain.Completed); err != nil {
 			return nil, s.statusFromError(err)
@@ -133,6 +153,10 @@ func (s *Orchestrator) CompleteTask(ctx context.Context, req *pb.CompleteTaskReq
 
 	if err := s.repo.Update(ctx, task); err != nil {
 		return nil, s.statusFromError(err)
+	}
+
+	if s.publisher != nil {
+		s.publisher.PublishTaskEvent(ctx, eventType, previousState, task, eventReason)
 	}
 
 	s.workerManager.DecrementActiveTasks(req.WorkerId)

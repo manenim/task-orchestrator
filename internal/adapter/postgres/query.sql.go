@@ -89,7 +89,7 @@ func (q *Queries) GetTask(ctx context.Context, id pgtype.UUID) (Task, error) {
 
 const listEligibleTasks = `-- name: ListEligibleTasks :many
 SELECT id, client_id, task_type, payload, state, run_at, worker_id, result, retry_count, max_retries, timeout_seconds, last_failed_at, created_at, updated_at FROM tasks
-WHERE state IN ('PENDING', 'SCHEDULED')
+WHERE state = 'PENDING'
   AND run_at <= $1
 ORDER BY run_at ASC
 LIMIT $2

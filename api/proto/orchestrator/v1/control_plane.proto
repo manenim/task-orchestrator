@@ -1,0 +1,254 @@
+syntax = "proto3";
+
+package orchestrator.v1;
+
+option go_package = "github.com/manenim/task-orchestrator/pkg/api/orchestrator/v1;orchestratorv1";
+
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+
+service ControlPlaneService {
+  rpc ListTasks(ListTasksRequest) returns (ListTasksResponse);
+  rpc GetTask(GetTaskRequest) returns (GetTaskResponse);
+  rpc StreamTaskEvents(StreamTaskEventsRequest) returns (stream StreamTaskEventsResponse);
+  rpc CancelTask(CancelTaskRequest) returns (CancelTaskResponse);
+  rpc RetryTask(RetryTaskRequest) returns (RetryTaskResponse);
+  rpc GetClusterStats(GetClusterStatsRequest) returns (GetClusterStatsResponse);
+  rpc ListTaskLogs(ListTaskLogsRequest) returns (ListTaskLogsResponse);
+}
+
+message Scope {
+  string tenant_id = 1;
+  string namespace_id = 2;
+}
+
+enum TaskState {
+  TASK_STATE_UNSPECIFIED = 0;
+  TASK_STATE_PENDING = 1;
+  TASK_STATE_SCHEDULED = 2;
+  TASK_STATE_RUNNING = 3;
+  TASK_STATE_COMPLETED = 4;
+  TASK_STATE_FAILED = 5;
+  TASK_STATE_CANCELLED = 6;
+}
+
+enum TaskSortField {
+  TASK_SORT_FIELD_UNSPECIFIED = 0;
+  TASK_SORT_FIELD_CREATED_AT = 1;
+  TASK_SORT_FIELD_UPDATED_AT = 2;
+  TASK_SORT_FIELD_RUN_AT = 3;
+}
+
+enum SortDirection {
+  SORT_DIRECTION_UNSPECIFIED = 0;
+  SORT_DIRECTION_ASC = 1;
+  SORT_DIRECTION_DESC = 2;
+}
+
+enum TaskEventType {
+  TASK_EVENT_TYPE_UNSPECIFIED = 0;
+  TASK_EVENT_TYPE_CREATED = 1;
+  TASK_EVENT_TYPE_STATE_CHANGED = 2;
+  TASK_EVENT_TYPE_RETRIED = 3;
+  TASK_EVENT_TYPE_CANCEL_REQUESTED = 4;
+  TASK_EVENT_TYPE_ASSIGNMENT_CHANGED = 5;
+  TASK_EVENT_TYPE_HEARTBEAT = 6;
+}
+
+enum LogLevel {
+  LOG_LEVEL_UNSPECIFIED = 0;
+  LOG_LEVEL_DEBUG = 1;
+  LOG_LEVEL_INFO = 2;
+  LOG_LEVEL_WARN = 3;
+  LOG_LEVEL_ERROR = 4;
+}
+
+message TimeRange {
+  google.protobuf.Timestamp start = 1;
+  google.protobuf.Timestamp end = 2;
+}
+
+message Task {
+  Scope scope = 1;
+  string task_id = 2;
+  string task_type = 3;
+  TaskState state = 4;
+
+  bytes payload = 5;
+  bytes result = 6;
+
+  string worker_id = 7;
+  int32 retry_count = 8;
+  int32 max_retries = 9;
+
+  google.protobuf.Timestamp run_at = 10;
+  google.protobuf.Timestamp created_at = 11;
+  google.protobuf.Timestamp updated_at = 12;
+  google.protobuf.Timestamp last_failed_at = 13;
+
+  int64 version = 14;
+
+  string error_message = 15;
+  map<string, string> attributes = 16;
+}
+
+message TaskFilter {
+  repeated TaskState states = 1;
+  repeated string task_types = 2;
+  string worker_id = 3;
+  string task_id_prefix = 4;
+  TimeRange created_at = 5;
+  TimeRange updated_at = 6;
+  TimeRange run_at = 7;
+  string text_query = 8;
+}
+
+message TaskSort {
+  TaskSortField field = 1;
+  SortDirection direction = 2;
+}
+
+message ListTasksRequest {
+  Scope scope = 1;
+  int32 page_size = 2;
+  string cursor = 3;
+  TaskFilter filter = 4;
+  TaskSort sort = 5;
+  bool include_payload = 6;
+  bool include_result = 7;
+}
+
+message ListTasksResponse {
+  repeated Task tasks = 1;
+  string next_cursor = 2;
+  bool has_more = 3;
+  google.protobuf.Timestamp snapshot_time = 4;
+  int64 snapshot_event_id = 5;
+}
+
+message GetTaskRequest {
+  Scope scope = 1;
+  string task_id = 2;
+  bool include_payload = 3;
+  bool include_result = 4;
+}
+
+message GetTaskResponse {
+  Task task = 1;
+}
+
+message TaskEventFilter {
+  repeated TaskState states = 1;
+  repeated string task_types = 2;
+  repeated string task_ids = 3;
+  string worker_id = 4;
+}
+
+message StreamTaskEventsRequest {
+  Scope scope = 1;
+  TaskEventFilter filter = 2;
+
+  oneof resume_position {
+    string resume_token = 3;
+    int64 after_event_id = 4;
+  }
+
+  int32 max_batch_size = 5;
+  bool include_current_snapshot = 6;
+  bool include_task_snapshot = 7;
+}
+
+message TaskEvent {
+  int64 event_id = 1;
+  google.protobuf.Timestamp occurred_at = 2;
+  TaskEventType event_type = 3;
+  Scope scope = 4;
+  string task_id = 5;
+  TaskState previous_state = 6;
+  TaskState current_state = 7;
+  int64 task_version = 8;
+  string worker_id = 9;
+  string reason = 10;
+  Task task_snapshot = 11;
+}
+
+message StreamTaskEventsResponse {
+  repeated TaskEvent events = 1;
+  string next_resume_token = 2;
+  int64 high_watermark_event_id = 3;
+}
+
+message CancelTaskRequest {
+  Scope scope = 1;
+  string task_id = 2;
+  string reason = 3;
+  string request_id = 4;
+  int64 expected_version = 5;
+}
+
+message CancelTaskResponse {
+  Task task = 1;
+  bool accepted = 2;
+  bool already_terminal = 3;
+}
+
+message RetryTaskRequest {
+  Scope scope = 1;
+  string task_id = 2;
+  string reason = 3;
+  google.protobuf.Timestamp run_at_override = 4;
+  string request_id = 5;
+  int64 expected_version = 6;
+}
+
+message RetryTaskResponse {
+  Task task = 1;
+  bool accepted = 2;
+}
+
+message GetClusterStatsRequest {
+  Scope scope = 1;
+  google.protobuf.Duration window = 2;
+}
+
+message StateCount {
+  TaskState state = 1;
+  int64 count = 2;
+}
+
+message GetClusterStatsResponse {
+  google.protobuf.Timestamp as_of = 1;
+  google.protobuf.Duration window = 2;
+
+  int64 active_workers = 3;
+  int64 overdue_tasks = 4;
+
+  repeated StateCount current_state_counts = 5;
+
+  int64 completed_in_window = 6;
+  int64 failed_in_window = 7;
+  int64 cancelled_in_window = 8;
+  int64 retried_in_window = 9;
+}
+
+message ListTaskLogsRequest {
+  Scope scope = 1;
+  string task_id = 2;
+  int32 page_size = 3;
+  string cursor = 4;
+}
+
+message TaskLogEntry {
+  int64 sequence = 1;
+  google.protobuf.Timestamp timestamp = 2;
+  LogLevel level = 3;
+  string component = 4;
+  string message = 5;
+  map<string, string> fields = 6;
+}
+
+message ListTaskLogsResponse {
+  repeated TaskLogEntry entries = 1;
+  string next_cursor = 2;
+  bool has_more = 3;
+}

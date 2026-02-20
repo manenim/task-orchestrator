@@ -27,7 +27,7 @@ WHERE id = $1;
 
 -- name: ListEligibleTasks :many
 SELECT * FROM tasks
-WHERE state IN ('PENDING', 'SCHEDULED')
+WHERE state = 'PENDING'
   AND run_at <= $1
 ORDER BY run_at ASC
 LIMIT $2;

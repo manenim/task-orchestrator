@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"sync"
@@ -30,6 +31,7 @@ type WorkerManager struct {
 	workers   map[string]*WorkerState
 	workerIDs []string
 	logger    port.Logger
+	publisher TaskStatePublisher
 }
 
 func NewWorkerManager(logger port.Logger) *WorkerManager {
@@ -38,6 +40,12 @@ func NewWorkerManager(logger port.Logger) *WorkerManager {
 		workerIDs: make([]string, 0),
 		logger:    logger,
 	}
+}
+
+func (w *WorkerManager) SetPublisher(publisher TaskStatePublisher) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.publisher = publisher
 }
 
 func (w *WorkerManager) Add(id string, stream pb.Orchestrator_StreamTasksServer) error {
@@ -57,6 +65,9 @@ func (w *WorkerManager) Add(id string, stream pb.Orchestrator_StreamTasksServer)
 	w.workerIDs = append(w.workerIDs, id)
 
 	w.logger.Info("Worker connected", port.String("worker_id", id), port.Int("total_workers", len(w.workerIDs)))
+	if w.publisher != nil {
+		w.publisher.PublishWorkerEvent(context.Background(), id, true)
+	}
 	return nil
 }
 
@@ -78,6 +89,9 @@ func (w *WorkerManager) Remove(id string) error {
 	}
 
 	w.logger.Info("Worker disconnected", port.String("worker_id", id), port.Int("total_workers", len(w.workerIDs)))
+	if w.publisher != nil {
+		w.publisher.PublishWorkerEvent(context.Background(), id, false)
+	}
 	return nil
 }
 
@@ -95,7 +109,7 @@ func (w *WorkerManager) GetNextWorker() (*SafeStream, string, error) {
 	for _, id := range w.workerIDs {
 		state, exists := w.workers[id]
 		if !exists {
-			continue 
+			continue
 		}
 		if state.ActiveTasks < minActiveTasks {
 			minActiveTasks = state.ActiveTasks
@@ -145,4 +159,14 @@ func (w *WorkerManager) CancelTask(workerID string, taskID string) error {
 
 	w.logger.Info("Sent cancellation signal", port.String("worker_id", workerID), port.String("task_id", taskID))
 	return nil
+}
+
+func (w *WorkerManager) ActiveWorkerCount() int {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+	return len(w.workerIDs)
+}
+
+func (w *WorkerManager) Count() int {
+	return w.ActiveWorkerCount()
 }

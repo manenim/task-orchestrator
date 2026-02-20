@@ -16,21 +16,57 @@ const (
 )
 
 type Task struct {
-	ID           string
-	Type         string
-	Payload      []byte
-	Result       []byte
-	State        TaskState
-	RunAt        time.Time
-	Version      int
-	WorkerID     string
-	ClientID     string
-	RetryCount    int
-	MaxRetries    int
+	ID             string
+	Type           string
+	Payload        []byte
+	Result         []byte
+	ErrorMessage   string
+	State          TaskState
+	RunAt          time.Time
+	Version        int
+	WorkerID       string
+	ClientID       string
+	RetryCount     int
+	MaxRetries     int
 	TimeoutSeconds int32
-	LastFailedAt  time.Time
-	CreatedAt     time.Time
-	UpdatedAt     time.Time
+	LastFailedAt   time.Time
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+}
+
+type SortField string
+
+const (
+	SortByCreatedAt SortField = "created_at"
+	SortByRunAt     SortField = "run_at"
+	SortByUpdatedAt SortField = "updated_at"
+)
+
+type SortDirection string
+
+const (
+	SortAsc  SortDirection = "ASC"
+	SortDesc SortDirection = "DESC"
+)
+
+type TaskFilter struct {
+	States       []TaskState
+	TaskTypes    []string
+	WorkerID     string
+	TaskIDPrefix string
+	TextQuery    string
+	CreatedAt    *TimeRange
+	UpdatedAt    *TimeRange
+	RunAt        *TimeRange
+	SortBy       SortField
+	SortDir      SortDirection
+	Limit        int
+	Offset       int
+}
+
+type TimeRange struct {
+	Start time.Time
+	End   time.Time
 }
 
 func NewTask(id, clientID, taskType string, payload []byte, runAt time.Time, timeout int32) *Task {
@@ -53,7 +89,6 @@ func NewTask(id, clientID, taskType string, payload []byte, runAt time.Time, tim
 }
 
 func (t *Task) ValidateTransition(target TaskState) error {
-
 	if target == Cancelled {
 		if t.State == Completed || t.State == Failed || t.State == Cancelled {
 			return ErrTaskFinalized

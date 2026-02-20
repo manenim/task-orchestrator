@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -11,7 +12,7 @@ import (
 	"github.com/manenim/task-orchestrator/internal/domain"
 	"github.com/manenim/task-orchestrator/internal/port"
 )
-	
+
 type PostgresTaskRepository struct {
 	pool    *pgxpool.Pool
 	queries *Queries
@@ -80,10 +81,10 @@ func (r *PostgresTaskRepository) Update(ctx context.Context, task *domain.Task) 
 	}
 
 	params := UpdateTaskParams{
-		ID:           pgtype.UUID{Bytes: id, Valid: true},
-		State:        string(task.State),
-		RetryCount:   int32(task.RetryCount),
-		RunAt:        pgtype.Timestamptz{Time: task.RunAt, Valid: !task.RunAt.IsZero()},
+		ID:         pgtype.UUID{Bytes: id, Valid: true},
+		State:      string(task.State),
+		RetryCount: int32(task.RetryCount),
+		RunAt:      pgtype.Timestamptz{Time: task.RunAt, Valid: !task.RunAt.IsZero()},
 	}
 
 	if task.WorkerID != "" {
@@ -119,6 +120,196 @@ func (r *PostgresTaskRepository) ListEligible(ctx context.Context, now time.Time
 
 func (r *PostgresTaskRepository) ReleaseTasks(ctx context.Context, workerID string) error {
 	return r.queries.ReleaseTasks(ctx, pgtype.Text{String: workerID, Valid: true})
+}
+
+func (r *PostgresTaskRepository) ListTasks(ctx context.Context, filter *domain.TaskFilter) ([]*domain.Task, error) {
+	if filter == nil {
+		filter = &domain.TaskFilter{}
+	}
+
+	orderBy := "updated_at"
+	switch filter.SortBy {
+	case domain.SortByCreatedAt:
+		orderBy = "created_at"
+	case domain.SortByRunAt:
+		orderBy = "run_at"
+	case domain.SortByUpdatedAt:
+		orderBy = "updated_at"
+	}
+
+	direction := "DESC"
+	if filter.SortDir == domain.SortAsc {
+		direction = "ASC"
+	}
+
+	args := make([]any, 0, 12)
+	where := make([]string, 0, 12)
+
+	if len(filter.States) > 0 {
+		states := make([]string, len(filter.States))
+		for i, s := range filter.States {
+			states[i] = string(s)
+		}
+		args = append(args, states)
+		where = append(where, fmt.Sprintf("state = ANY($%d)", len(args)))
+	}
+
+	if len(filter.TaskTypes) > 0 {
+		args = append(args, filter.TaskTypes)
+		where = append(where, fmt.Sprintf("task_type = ANY($%d)", len(args)))
+	}
+
+	if filter.WorkerID != "" {
+		args = append(args, filter.WorkerID)
+		where = append(where, fmt.Sprintf("worker_id = $%d", len(args)))
+	}
+
+	if filter.TaskIDPrefix != "" {
+		args = append(args, filter.TaskIDPrefix+"%")
+		where = append(where, fmt.Sprintf("id::text ILIKE $%d", len(args)))
+	}
+
+	if filter.TextQuery != "" {
+		args = append(args, "%"+filter.TextQuery+"%")
+		where = append(where, fmt.Sprintf("(id::text ILIKE $%d OR task_type ILIKE $%d OR client_id ILIKE $%d)", len(args), len(args), len(args)))
+	}
+
+	if tr := filter.CreatedAt; tr != nil {
+		if !tr.Start.IsZero() {
+			args = append(args, tr.Start)
+			where = append(where, fmt.Sprintf("created_at >= $%d", len(args)))
+		}
+		if !tr.End.IsZero() {
+			args = append(args, tr.End)
+			where = append(where, fmt.Sprintf("created_at < $%d", len(args)))
+		}
+	}
+
+	if tr := filter.UpdatedAt; tr != nil {
+		if !tr.Start.IsZero() {
+			args = append(args, tr.Start)
+			where = append(where, fmt.Sprintf("updated_at >= $%d", len(args)))
+		}
+		if !tr.End.IsZero() {
+			args = append(args, tr.End)
+			where = append(where, fmt.Sprintf("updated_at < $%d", len(args)))
+		}
+	}
+
+	if tr := filter.RunAt; tr != nil {
+		if !tr.Start.IsZero() {
+			args = append(args, tr.Start)
+			where = append(where, fmt.Sprintf("run_at >= $%d", len(args)))
+		}
+		if !tr.End.IsZero() {
+			args = append(args, tr.End)
+			where = append(where, fmt.Sprintf("run_at < $%d", len(args)))
+		}
+	}
+
+	query := `
+SELECT
+	id::text,
+	client_id,
+	task_type,
+	payload,
+	state,
+	run_at,
+	worker_id,
+	result,
+	retry_count,
+	max_retries,
+	timeout_seconds,
+	last_failed_at,
+	created_at,
+	updated_at
+FROM tasks
+`
+	if len(where) > 0 {
+		query += " WHERE " + strings.Join(where, " AND ")
+	}
+	query += fmt.Sprintf(" ORDER BY %s %s, id ASC", orderBy, direction)
+
+	limit := filter.Limit
+	if limit <= 0 {
+		limit = 50
+	}
+	args = append(args, limit)
+	query += fmt.Sprintf(" LIMIT $%d", len(args))
+
+	if filter.Offset > 0 {
+		args = append(args, filter.Offset)
+		query += fmt.Sprintf(" OFFSET $%d", len(args))
+	}
+
+	rows, err := r.pool.Query(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list tasks query failed: %w", err)
+	}
+	defer rows.Close()
+
+	var tasks []*domain.Task
+	for rows.Next() {
+		var (
+			id, clientID, taskType, state, workerIDStr string
+			payload, result                            []byte
+			runAt, createdAt, updatedAt                time.Time
+			retryCount, maxRetries                     int
+			timeoutSeconds                             int32
+			lastFailedAt                               time.Time
+
+			workerID                   pgtype.Text
+			lastFailedAtPG             pgtype.Timestamptz
+			retryCount32, maxRetries32 int32
+		)
+
+		if err := rows.Scan(
+			&id,
+			&clientID,
+			&taskType,
+			&payload,
+			&state,
+			&runAt,
+			&workerID,
+			&result,
+			&retryCount32,
+			&maxRetries32,
+			&timeoutSeconds,
+			&lastFailedAtPG,
+			&createdAt,
+			&updatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("scan task row failed: %w", err)
+		}
+
+		if workerID.Valid {
+			workerIDStr = workerID.String
+		}
+		if lastFailedAtPG.Valid {
+			lastFailedAt = lastFailedAtPG.Time
+		}
+		retryCount = int(retryCount32)
+		maxRetries = int(maxRetries32)
+
+		task := &domain.Task{
+			ID:             id,
+			ClientID:       clientID,
+			Type:           taskType,
+			Payload:        payload,
+			State:          domain.TaskState(state),
+			RunAt:          runAt,
+			WorkerID:       workerIDStr,
+			Result:         result,
+			RetryCount:     retryCount,
+			MaxRetries:     maxRetries,
+			TimeoutSeconds: timeoutSeconds,
+			LastFailedAt:   lastFailedAt,
+			CreatedAt:      createdAt,
+			UpdatedAt:      updatedAt,
+		}
+		tasks = append(tasks, task)
+	}
+	return tasks, nil
 }
 
 func mapToDomain(row Task) *domain.Task {

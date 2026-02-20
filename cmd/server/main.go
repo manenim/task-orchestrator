@@ -18,6 +18,7 @@ import (
 	"github.com/manenim/task-orchestrator/internal/domain"
 	"github.com/manenim/task-orchestrator/internal/port"
 	"github.com/manenim/task-orchestrator/internal/service"
+	cpb "github.com/manenim/task-orchestrator/pkg/api/orchestrator/v1"
 	pb "github.com/manenim/task-orchestrator/pkg/api/v1"
 	"google.golang.org/grpc"
 )
@@ -53,11 +54,12 @@ func run() error {
 	defer logger.Sync()
 
 	var taskRepo port.TaskRepository
+	var pool *pgxpool.Pool
 
 	switch cfg.StorageDriver {
 	case "postgres":
 		logger.Info("Using Postgres Storage", port.String("url", cfg.DatabaseURL))
-		pool, err := pgxpool.New(ctx, cfg.DatabaseURL)
+		pool, err = pgxpool.New(ctx, cfg.DatabaseURL)
 		if err != nil {
 			return fmt.Errorf("failed to connect to postgres: %w", err)
 		}
@@ -74,16 +76,23 @@ func run() error {
 	}
 
 	taskQueue := make(chan *domain.Task, taskQueueBufferSize)
-	workerManger := service.NewWorkerManager(logger)
-	dispatcher := service.NewDispatcher(workerManger, taskQueue, logger, taskRepo)
-	taskService := service.New(taskRepo, logger, workerManger)
-	stateMgr := service.NewStateManager(taskRepo, logger, batchSize, taskQueue)
+	workerManager := service.NewWorkerManager(logger)
+	controlPlane := service.NewControlPlane(taskRepo, logger, workerManager, pool, cfg.TenantID, cfg.NamespaceID)
+	if err := controlPlane.Init(ctx); err != nil {
+		return fmt.Errorf("failed to initialize control-plane: %w", err)
+	}
+	workerManager.SetPublisher(controlPlane)
+
+	dispatcher := service.NewDispatcher(workerManager, taskQueue, logger, taskRepo, controlPlane)
+	taskService := service.New(taskRepo, logger, workerManager, controlPlane)
+	stateMgr := service.NewStateManager(taskRepo, logger, batchSize, taskQueue, controlPlane)
 
 	go stateMgr.Run(ctx)
 	go dispatcher.Run(ctx)
 
 	grpcServer := grpc.NewServer()
 	pb.RegisterOrchestratorServer(grpcServer, taskService)
+	cpb.RegisterControlPlaneServiceServer(grpcServer, controlPlane)
 
 	srvErr := make(chan error, 1)
 	address := fmt.Sprintf(":%d", grpcPort)

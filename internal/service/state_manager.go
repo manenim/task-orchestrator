@@ -6,6 +6,7 @@ import (
 
 	"github.com/manenim/task-orchestrator/internal/domain"
 	"github.com/manenim/task-orchestrator/internal/port"
+	orchestratorv1 "github.com/manenim/task-orchestrator/pkg/api/orchestrator/v1"
 )
 
 type StateManager struct {
@@ -14,15 +15,17 @@ type StateManager struct {
 	interval  time.Duration
 	batchSize int
 	taskQueue chan<- *domain.Task
+	publisher TaskStatePublisher
 }
 
-func NewStateManager(repo port.TaskRepository, logger port.Logger, batchSize int, taskQueue chan<- *domain.Task) *StateManager {
+func NewStateManager(repo port.TaskRepository, logger port.Logger, batchSize int, taskQueue chan<- *domain.Task, publisher TaskStatePublisher) *StateManager {
 	return &StateManager{
 		repo:      repo,
 		logger:    logger,
 		interval:  time.Duration(500 * time.Millisecond),
 		batchSize: batchSize,
 		taskQueue: taskQueue,
+		publisher: publisher,
 	}
 }
 
@@ -41,7 +44,11 @@ func (s *StateManager) Run(ctx context.Context) {
 			} else if len(tasks) > 0 {
 				s.logger.Info("found eligible tasks", port.Int("count", len(tasks)))
 				for _, task := range tasks {
+					if task.State != domain.Pending {
+						continue
+					}
 					s.logger.Info("Scheduling Task", port.String("task_id", task.ID))
+					previousState := task.State
 					if err := task.UpdateState(domain.Scheduled); err != nil {
 						s.logger.Error("Failed to update state", err, port.String("task_id", task.ID))
 						continue
@@ -49,6 +56,9 @@ func (s *StateManager) Run(ctx context.Context) {
 					if err := s.repo.Update(ctx, task); err != nil {
 						s.logger.Error("failed to save task", err, port.String("task_id", task.ID))
 						continue
+					}
+					if s.publisher != nil {
+						s.publisher.PublishTaskEvent(ctx, orchestratorv1.TaskEventType_TASK_EVENT_TYPE_STATE_CHANGED, previousState, task, "task scheduled")
 					}
 					s.taskQueue <- task
 				}

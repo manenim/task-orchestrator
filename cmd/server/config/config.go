@@ -1,21 +1,34 @@
 package config
+
 import (
 	"fmt"
 	"os"
+	"path/filepath"
+
+	"github.com/joho/godotenv"
 )
+
 type Config struct {
 	Port          string
-	StorageDriver string 
-	DatabaseURL   string 
-	RedisAddr     string 
+	StorageDriver string
+	DatabaseURL   string
+	RedisAddr     string
+	TenantID      string
+	NamespaceID   string
 }
 
 func Load() (*Config, error) {
+	if err := loadDotEnv(); err != nil {
+		return nil, err
+	}
+
 	cfg := &Config{
 		Port:          getEnv("PORT", "50051"),
-		StorageDriver: getEnv("STORAGE_DRIVER", "memory"),
+		StorageDriver: getEnv("STORAGE_DRIVER", "postgres"),
 		DatabaseURL:   os.Getenv("DATABASE_URL"),
 		RedisAddr:     os.Getenv("REDIS_ADDR"),
+		TenantID:      getEnv("TENANT_ID", "default"),
+		NamespaceID:   getEnv("NAMESPACE_ID", "default"),
 	}
 
 	switch cfg.StorageDriver {
@@ -36,4 +49,39 @@ func getEnv(key, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+func loadDotEnv() error {
+	for _, path := range dotenvCandidates() {
+		if _, err := os.Stat(path); err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			return fmt.Errorf("failed to access %s: %w", path, err)
+		}
+
+		if err := godotenv.Load(path); err != nil {
+			return fmt.Errorf("failed to load %s: %w", path, err)
+		}
+		return nil
+	}
+	return nil
+}
+
+func dotenvCandidates() []string {
+	wd, err := os.Getwd()
+	if err != nil {
+		return []string{".env"}
+	}
+
+	candidates := make([]string, 0, 8)
+	for dir := wd; ; dir = filepath.Dir(dir) {
+		candidates = append(candidates, filepath.Join(dir, ".env"))
+
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+	}
+	return candidates
 }

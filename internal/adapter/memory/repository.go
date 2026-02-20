@@ -3,6 +3,8 @@ package memory
 import (
 	"context"
 	"fmt"
+	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -84,4 +86,113 @@ func (r *InMemoryTaskRepository) ReleaseTasks(ctx context.Context, workerID stri
 	}
 
 	return nil
+}
+
+func (r *InMemoryTaskRepository) ListTasks(ctx context.Context, filter *domain.TaskFilter) ([]*domain.Task, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	if filter == nil {
+		filter = &domain.TaskFilter{}
+	}
+
+	tasks := make([]*domain.Task, 0, len(r.store))
+
+	for _, t := range r.store {
+		if len(filter.States) > 0 {
+			match := false
+			for _, s := range filter.States {
+				if t.State == s {
+					match = true
+					break
+				}
+			}
+			if !match {
+				continue
+			}
+		}
+
+		if len(filter.TaskTypes) > 0 {
+			match := false
+			for _, typ := range filter.TaskTypes {
+				if t.Type == typ {
+					match = true
+					break
+				}
+			}
+			if !match {
+				continue
+			}
+		}
+
+		if filter.WorkerID != "" && t.WorkerID != filter.WorkerID {
+			continue
+		}
+
+		if filter.TaskIDPrefix != "" && !strings.HasPrefix(t.ID, filter.TaskIDPrefix) {
+			continue
+		}
+
+		if filter.TextQuery != "" {
+			q := strings.ToLower(filter.TextQuery)
+			if !strings.Contains(strings.ToLower(t.ID), q) &&
+				!strings.Contains(strings.ToLower(t.Type), q) &&
+				!strings.Contains(strings.ToLower(t.ClientID), q) {
+				continue
+			}
+		}
+
+		if filter.CreatedAt != nil {
+			if !filter.CreatedAt.Start.IsZero() && t.CreatedAt.Before(filter.CreatedAt.Start) {
+				continue
+			}
+			if !filter.CreatedAt.End.IsZero() && !t.CreatedAt.Before(filter.CreatedAt.End) {
+				continue
+			}
+		}
+
+		if filter.RunAt != nil {
+			if !filter.RunAt.Start.IsZero() && t.RunAt.Before(filter.RunAt.Start) {
+				continue
+			}
+			if !filter.RunAt.End.IsZero() && !t.RunAt.Before(filter.RunAt.End) {
+				continue
+			}
+		}
+
+		tasks = append(tasks, t)
+	}
+
+	sort.Slice(tasks, func(i, j int) bool {
+		var less bool
+		switch filter.SortBy {
+		case domain.SortByCreatedAt:
+			less = tasks[i].CreatedAt.Before(tasks[j].CreatedAt)
+		case domain.SortByRunAt:
+			less = tasks[i].RunAt.Before(tasks[j].RunAt)
+		case domain.SortByUpdatedAt:
+			less = tasks[i].UpdatedAt.Before(tasks[j].UpdatedAt)
+		default:
+			less = tasks[i].UpdatedAt.Before(tasks[j].UpdatedAt)
+		}
+
+		if filter.SortDir == domain.SortAsc {
+			return less
+		}
+		return !less
+	})
+
+	start := filter.Offset
+	if start > len(tasks) {
+		start = len(tasks)
+	}
+	end := start + filter.Limit
+	if filter.Limit <= 0 {
+		end = start + 50
+	}
+	if end > len(tasks) {
+		end = len(tasks)
+	}
+
+	return tasks[start:end], nil
 }
