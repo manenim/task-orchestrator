@@ -1,33 +1,58 @@
-// Package taskorch is the root module for the Task Orchestrator, a
-// distributed task processing system built on gRPC streaming.
+// Package taskorch provides a distributed task orchestration system built on
+// gRPC streaming.
 //
-// The module is organized as follows:
+// Core behavior:
+//   - clients submit tasks through the worker-plane API,
+//   - the server schedules eligible tasks and dispatches them to connected workers,
+//   - workers execute typed handlers and report success/failure,
+//   - the orchestrator enforces state transitions, retries, timeouts, and cancellation.
 //
-//   - pkg/worker: Embeddable worker library. Connect to an orchestrator,
-//     register typed handlers, and process tasks with automatic reconnection
-//     and graceful shutdown.
-//   - pkg/client: Go SDK for submitting and cancelling tasks.
-//     Wraps the gRPC stubs behind clean Go types.
-//   - internal/domain: Core domain model including Task, TaskState, and
-//     the state machine that governs task lifecycle transitions.
-//   - internal/service: Orchestrator, Dispatcher, StateManager, and
-//     ControlPlane services.
-//   - internal/adapter: Storage implementations (PostgreSQL, Redis,
-//     in-memory) and logging adapters.
+// High-level state flow:
 //
-// Getting started with the worker SDK:
+//	PENDING -> SCHEDULED -> RUNNING -> COMPLETED
+//	                     -> PENDING   (retry)
+//	                     -> FAILED
+//	PENDING/SCHEDULED/RUNNING -> CANCELLED
 //
-//	w, _ := worker.New("localhost:50051")
+// Main packages:
+//   - pkg/worker: Embeddable worker SDK with reconnect and graceful drain.
+//   - pkg/client: Embeddable Go client SDK for submit/cancel.
+//   - internal/domain: Task model and state-machine validation.
+//   - internal/service: Orchestrator, dispatcher, scheduler, control-plane.
+//   - internal/adapter: Storage adapters (Postgres, Redis, in-memory) and logging.
+//
+// Minimal worker example:
+//
+//	w, err := worker.New("localhost:50051")
+//	if err != nil {
+//		panic(err)
+//	}
 //	w.Handle("email", func(ctx context.Context, t worker.Task) ([]byte, error) {
 //		return []byte("sent"), nil
 //	})
-//	w.Run(ctx)
+//	if err := w.Run(ctx); err != nil {
+//		panic(err)
+//	}
 //
-// Getting started with the client SDK:
+// Minimal client example:
 //
-//	c, _ := client.New("localhost:50051")
-//	id, _ := c.SubmitTask(ctx, client.SubmitRequest{
+//	c, err := client.New("localhost:50051")
+//	if err != nil {
+//		panic(err)
+//	}
+//	defer c.Close()
+//
+//	_, err = c.SubmitTask(ctx, client.SubmitRequest{
 //		TaskID: uuid.New().String(),
 //		Type:   "email",
 //	})
+//	if err != nil {
+//		panic(err)
+//	}
+//
+// For full operational and API details, see:
+//   - README.md
+//   - docs/architecture.md
+//   - docs/api-reference.md
+//   - docs/runbook.md
 package taskorch
