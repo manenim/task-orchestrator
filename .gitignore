@@ -11,3 +11,5 @@
 
 # Documentation artifacts (Explainer mode)
 explainer/
+
+.env
