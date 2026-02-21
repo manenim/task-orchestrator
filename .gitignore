@@ -9,7 +9,6 @@
 # OS
 .DS_Store
 
-# Documentation artifacts (Explainer mode)
 explainer/
 
 .env
