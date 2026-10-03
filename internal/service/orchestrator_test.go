@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -9,6 +10,8 @@ import (
 	"github.com/manenim/task-orchestrator/internal/domain"
 	"github.com/manenim/task-orchestrator/internal/port"
 	pb "github.com/manenim/task-orchestrator/pkg/api/v1"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 type noopLogger struct{}
@@ -174,6 +177,7 @@ func TestCompleteTask_Success(t *testing.T) {
 
 	task, _ := repo.Get(context.Background(), "comp-1")
 	task.State = domain.Running
+	task.WorkerID = "worker-1"
 	repo.Update(context.Background(), task)
 
 	resp, err := orch.CompleteTask(context.Background(), &pb.CompleteTaskRequest{
@@ -201,12 +205,14 @@ func TestCompleteTask_WithRetryableError(t *testing.T) {
 	orch, repo := newTestOrchestrator()
 
 	orch.SubmitTask(context.Background(), &pb.SubmitTaskRequest{
-		TaskId: "retry-1",
-		Type:   "email",
+		TaskId:     "retry-1",
+		MaxRetries: 3,
+		Type:       "email",
 	})
 
 	task, _ := repo.Get(context.Background(), "retry-1")
 	task.State = domain.Running
+	task.WorkerID = "worker-1"
 	repo.Update(context.Background(), task)
 
 	resp, err := orch.CompleteTask(context.Background(), &pb.CompleteTaskRequest{
@@ -241,6 +247,7 @@ func TestCompleteTask_FatalError(t *testing.T) {
 
 	task, _ := repo.Get(context.Background(), "fatal-1")
 	task.State = domain.Running
+	task.WorkerID = "worker-1"
 	repo.Update(context.Background(), task)
 
 	_, err := orch.CompleteTask(context.Background(), &pb.CompleteTaskRequest{
@@ -269,6 +276,7 @@ func TestCompleteTask_ExhaustedRetries(t *testing.T) {
 
 	task, _ := repo.Get(context.Background(), "exhaust-1")
 	task.State = domain.Running
+	task.WorkerID = "worker-1"
 	task.RetryCount = 3
 	task.MaxRetries = 3
 	repo.Update(context.Background(), task)
@@ -300,5 +308,67 @@ func TestStatusFromError(t *testing.T) {
 	err = orch.statusFromError(domain.ErrInvalidTransition)
 	if err == nil {
 		t.Fatal("expected non-nil error")
+	}
+}
+
+func TestSubmitTask_RetryBudget(t *testing.T) {
+	for _, budget := range []int32{0, 1, 5} {
+		t.Run(fmt.Sprint(budget), func(t *testing.T) {
+			orch, repo := newTestOrchestrator()
+			_, err := orch.SubmitTask(context.Background(), &pb.SubmitTaskRequest{TaskId: "budget", Type: "job", MaxRetries: budget})
+			if err != nil {
+				t.Fatal(err)
+			}
+			task, _ := repo.Get(context.Background(), "budget")
+			if task.MaxRetries != int(budget) {
+				t.Fatalf("retry budget = %d, want %d", task.MaxRetries, budget)
+			}
+			task.State = domain.Running
+			task.WorkerID = "worker-1"
+			if err := repo.Update(context.Background(), task); err != nil {
+				t.Fatal(err)
+			}
+			_, err = orch.CompleteTask(context.Background(), &pb.CompleteTaskRequest{TaskId: "budget", WorkerId: "worker-1", ErrorMessage: "temporary", IsRetryable: true})
+			if err != nil {
+				t.Fatal(err)
+			}
+			task, _ = repo.Get(context.Background(), "budget")
+			want := domain.Pending
+			if budget == 0 {
+				want = domain.Failed
+			}
+			if task.State != want {
+				t.Fatalf("after failure state = %s, want %s", task.State, want)
+			}
+		})
+	}
+}
+
+func TestSubmitTask_RejectsInvalidRetryBudget(t *testing.T) {
+	for _, budget := range []int32{-1, 31} {
+		orch, _ := newTestOrchestrator()
+		_, err := orch.SubmitTask(context.Background(), &pb.SubmitTaskRequest{TaskId: "budget", Type: "job", MaxRetries: budget})
+		if status.Code(err) != codes.InvalidArgument {
+			t.Fatalf("budget %d: got %v", budget, err)
+		}
+	}
+}
+
+func TestCompleteTask_RejectsStaleWorker(t *testing.T) {
+	orch, repo := newTestOrchestrator()
+	task := domain.NewTask("reassigned", "", "job", nil, time.Time{}, 0)
+	task.State = domain.Running
+	task.WorkerID = "worker-1"
+	task.WorkerID = "replacement-worker"
+	if err := repo.Create(context.Background(), task); err != nil {
+		t.Fatal(err)
+	}
+	_, err := orch.CompleteTask(context.Background(), &pb.CompleteTaskRequest{TaskId: task.ID, WorkerId: "disconnected-worker", Result: []byte("stale")})
+	if status.Code(err) != codes.FailedPrecondition {
+		t.Fatalf("stale worker completion accepted: %v", err)
+	}
+	got, _ := repo.Get(context.Background(), task.ID)
+	if got.State != domain.Running || got.WorkerID != "replacement-worker" {
+		t.Fatalf("stale completion changed task: %+v", got)
 	}
 }

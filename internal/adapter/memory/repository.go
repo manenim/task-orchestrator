@@ -30,7 +30,7 @@ func (r *InMemoryTaskRepository) Create(ctx context.Context, t *domain.Task) err
 	if _, exists := r.store[t.ID]; exists {
 		return fmt.Errorf("task already exists: %s", t.ID)
 	}
-	r.store[t.ID] = t
+	r.store[t.ID] = cloneTask(t)
 	return nil
 }
 
@@ -42,7 +42,7 @@ func (r *InMemoryTaskRepository) ListEligible(ctx context.Context, now time.Time
 
 	for _, t := range r.store {
 		if t.State == domain.Pending && (t.RunAt.Before(now) || t.RunAt.Equal(now)) {
-			tasks = append(tasks, t)
+			tasks = append(tasks, cloneTask(t))
 			if len(tasks) >= limit {
 				break
 			}
@@ -57,7 +57,7 @@ func (r *InMemoryTaskRepository) Get(ctx context.Context, id string) (*domain.Ta
 	if !exists {
 		return nil, domain.ErrTaskNotFound
 	}
-	return task, nil
+	return cloneTask(task), nil
 }
 func (r *InMemoryTaskRepository) Update(ctx context.Context, t *domain.Task) error {
 	r.mu.Lock()
@@ -65,7 +65,7 @@ func (r *InMemoryTaskRepository) Update(ctx context.Context, t *domain.Task) err
 	if _, exists := r.store[t.ID]; !exists {
 		return fmt.Errorf("task %s not found", t.ID)
 	}
-	r.store[t.ID] = t
+	r.store[t.ID] = cloneTask(t)
 	return nil
 }
 
@@ -160,7 +160,7 @@ func (r *InMemoryTaskRepository) ListTasks(ctx context.Context, filter *domain.T
 			}
 		}
 
-		tasks = append(tasks, t)
+		tasks = append(tasks, cloneTask(t))
 	}
 
 	sort.Slice(tasks, func(i, j int) bool {
@@ -195,4 +195,26 @@ func (r *InMemoryTaskRepository) ListTasks(ctx context.Context, filter *domain.T
 	}
 
 	return tasks[start:end], nil
+}
+
+// cloneTask keeps repository state private after the lock is released.
+func cloneTask(task *domain.Task) *domain.Task {
+	snapshot := *task
+	snapshot.Payload = append([]byte(nil), task.Payload...)
+	snapshot.Result = append([]byte(nil), task.Result...)
+	return &snapshot
+}
+
+func (r *InMemoryTaskRepository) RecoverTasks(ctx context.Context) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, task := range r.store {
+		if task.State == domain.Scheduled || task.State == domain.Running {
+			if err := task.UpdateState(domain.Pending); err != nil {
+				return err
+			}
+			task.WorkerID = ""
+		}
+	}
+	return nil
 }

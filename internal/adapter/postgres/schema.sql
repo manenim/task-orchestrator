@@ -43,3 +43,7 @@ CREATE TABLE IF NOT EXISTS task_logs (
 );
 
 CREATE INDEX IF NOT EXISTS idx_task_logs_task_sequence ON task_logs(task_id, sequence DESC);
+
+-- Additive upgrade for existing databases. Safe to reapply with cmd/migrate.
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS error_message TEXT NOT NULL DEFAULT '';
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS version INT NOT NULL DEFAULT 1;

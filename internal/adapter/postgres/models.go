@@ -23,4 +23,28 @@ type Task struct {
 	LastFailedAt   pgtype.Timestamptz
 	CreatedAt      pgtype.Timestamptz
 	UpdatedAt      pgtype.Timestamptz
+	ErrorMessage   string
+	Version        int32
+}
+
+type TaskEvent struct {
+	EventID       int64
+	OccurredAt    pgtype.Timestamptz
+	EventType     string
+	TaskID        string
+	PreviousState string
+	CurrentState  string
+	TaskVersion   int64
+	WorkerID      string
+	Reason        string
+}
+
+type TaskLog struct {
+	Sequence  int64
+	TaskID    string
+	Timestamp pgtype.Timestamptz
+	Level     string
+	Component string
+	Message   string
+	Fields    []byte
 }

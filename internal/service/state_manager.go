@@ -60,7 +60,11 @@ func (s *StateManager) Run(ctx context.Context) {
 					if s.publisher != nil {
 						s.publisher.PublishTaskEvent(ctx, orchestratorv1.TaskEventType_TASK_EVENT_TYPE_STATE_CHANGED, previousState, task, "task scheduled")
 					}
-					s.taskQueue <- task
+					select {
+					case s.taskQueue <- task:
+					case <-ctx.Done():
+						return
+					}
 				}
 			}
 		}

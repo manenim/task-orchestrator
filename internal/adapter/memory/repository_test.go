@@ -321,3 +321,29 @@ func taskIDs(tasks []*domain.Task) []string {
 	}
 	return ids
 }
+
+func TestRepository_ReturnsIndependentSnapshots(t *testing.T) {
+	repo := newTestRepo()
+	task := domain.NewTask("snapshot", "", "job", []byte("original"), time.Time{}, 0)
+	seedTasks(t, repo, task)
+	task.Payload[0] = 'X'
+	for _, read := range []func() *domain.Task{
+		func() *domain.Task { got, _ := repo.Get(context.Background(), task.ID); return got },
+		func() *domain.Task {
+			got, _ := repo.ListEligible(context.Background(), time.Now().Add(time.Second), 10)
+			return got[0]
+		},
+		func() *domain.Task { got, _ := repo.ListTasks(context.Background(), nil); return got[0] },
+	} {
+		got := read()
+		if string(got.Payload) != "original" {
+			t.Fatalf("stored payload mutated: %s", got.Payload)
+		}
+		got.Payload[0] = 'Y'
+		got.State = domain.Cancelled
+	}
+	got, _ := repo.Get(context.Background(), task.ID)
+	if got.State != domain.Pending || string(got.Payload) != "original" {
+		t.Fatalf("read mutated store: %+v", got)
+	}
+}

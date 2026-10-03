@@ -1,0 +1,102 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: server
+spec:
+  selector:
+    app: server
+  ports:
+    - name: grpc
+      port: 50051
+      targetPort: 50051
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: server
+spec:
+  # Startup recovery assumes one server owns all task assignments.
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: server
+  template:
+    metadata:
+      labels:
+        app: server
+    spec:
+      terminationGracePeriodSeconds: 20
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        - name: migrate
+          image: task-orchestrator:dev
+          imagePullPolicy: IfNotPresent
+          command: [/app/migrate]
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: orchestrator-db
+                  key: database-url
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 250m
+              memory: 128Mi
+      containers:
+        - name: server
+          image: task-orchestrator:dev
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: STORAGE_DRIVER
+              value: postgres
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: orchestrator-db
+                  key: database-url
+            - name: SHUTDOWN_TIMEOUT
+              value: 10s
+          ports:
+            - name: grpc
+              containerPort: 50051
+          startupProbe:
+            grpc:
+              port: 50051
+              service: readiness
+            periodSeconds: 2
+            failureThreshold: 30
+            timeoutSeconds: 2
+          readinessProbe:
+            grpc:
+              port: 50051
+              service: readiness
+            periodSeconds: 2
+            failureThreshold: 2
+            timeoutSeconds: 2
+          livenessProbe:
+            grpc:
+              port: 50051
+              service: liveness
+            periodSeconds: 10
+            timeoutSeconds: 2
+          resources:
+            requests:
+              cpu: 100m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]

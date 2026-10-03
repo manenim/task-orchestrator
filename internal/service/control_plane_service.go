@@ -542,7 +542,7 @@ func (s *ControlPlane) GetTask(ctx context.Context, req *cpb.GetTaskRequest) (*c
 	}
 
 	scope := s.normalizeScope(req.GetScope())
-	pbTask := mapDomainTaskToProto(scope, task, true, true)
+	pbTask := mapDomainTaskToProto(scope, task, req.GetIncludePayload(), req.GetIncludeResult())
 
 	return &cpb.GetTaskResponse{
 		Task: pbTask,
@@ -640,4 +640,85 @@ func (s *ControlPlane) GetClusterStats(ctx context.Context, req *cpb.GetClusterS
 	return &cpb.GetClusterStatsResponse{
 		ActiveWorkers: int64(s.workerManager.Count()),
 	}, nil
+}
+
+// CancelTask supports unconditional, idempotent cancellation. Conditional writes
+// remain explicit unsupported capabilities until repositories provide atomic CAS.
+func (s *ControlPlane) CancelTask(ctx context.Context, req *cpb.CancelTaskRequest) (*cpb.CancelTaskResponse, error) {
+	if req.GetExpectedVersion() != 0 {
+		return nil, status.Error(codes.Unimplemented, "conditional cancellation is not supported")
+	}
+	if req.GetTaskId() == "" {
+		return nil, status.Error(codes.InvalidArgument, "task_id is required")
+	}
+	task, err := s.repo.Get(ctx, req.GetTaskId())
+	if err != nil {
+		return nil, New(s.repo, s.logger, s.workerManager, s).statusFromError(err)
+	}
+	previous := task.State
+	if err := task.UpdateState(domain.Cancelled); err != nil {
+		if err == domain.ErrTaskFinalized {
+			return &cpb.CancelTaskResponse{Task: mapDomainTaskToProto(s.normalizeScope(req.GetScope()), task, false, false), AlreadyTerminal: true}, nil
+		}
+		return nil, status.Error(codes.FailedPrecondition, err.Error())
+	}
+	if err := s.repo.Update(ctx, task); err != nil {
+		return nil, status.Errorf(codes.Internal, "persist cancellation: %v", err)
+	}
+	if task.WorkerID != "" {
+		if err := s.workerManager.CancelTask(task.WorkerID, task.ID); err != nil {
+			s.logger.Error("Failed to signal cancellation", err)
+		}
+	}
+	reason := req.GetReason()
+	if reason == "" {
+		reason = "task cancelled"
+	}
+	s.PublishTaskEvent(ctx, cpb.TaskEventType_TASK_EVENT_TYPE_CANCEL_REQUESTED, previous, task, reason)
+	return &cpb.CancelTaskResponse{Task: mapDomainTaskToProto(s.normalizeScope(req.GetScope()), task, false, false), Accepted: true}, nil
+}
+
+func (s *ControlPlane) ListTaskLogs(ctx context.Context, req *cpb.ListTaskLogsRequest) (*cpb.ListTaskLogsResponse, error) {
+	if s.pool == nil {
+		return nil, status.Error(codes.Unimplemented, "persistent task logs require Postgres storage")
+	}
+	if req.GetTaskId() == "" {
+		return nil, status.Error(codes.InvalidArgument, "task_id is required")
+	}
+	offset, err := decodeCursor(req.GetCursor())
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+	size := sanitizePageSize(req.GetPageSize())
+	rows, err := s.pool.Query(ctx, `SELECT sequence, timestamp, level, component, message, fields FROM task_logs WHERE task_id=$1 ORDER BY sequence DESC LIMIT $2 OFFSET $3`, req.GetTaskId(), size+1, offset)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "query task logs: %v", err)
+	}
+	defer rows.Close()
+	entries := make([]*cpb.TaskLogEntry, 0, size+1)
+	for rows.Next() {
+		entry := &cpb.TaskLogEntry{}
+		var timestamp time.Time
+		var level string
+		var fields []byte
+		if err := rows.Scan(&entry.Sequence, &timestamp, &level, &entry.Component, &entry.Message, &fields); err != nil {
+			return nil, status.Errorf(codes.Internal, "read task log: %v", err)
+		}
+		entry.Timestamp = timestamppb.New(timestamp)
+		entry.Level = cpb.LogLevel(cpb.LogLevel_value[level])
+		if err := json.Unmarshal(fields, &entry.Fields); err != nil {
+			return nil, status.Errorf(codes.Internal, "decode task log fields: %v", err)
+		}
+		entries = append(entries, entry)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, status.Errorf(codes.Internal, "read task logs: %v", err)
+	}
+	response := &cpb.ListTaskLogsResponse{Entries: entries}
+	if len(entries) > size {
+		response.Entries = entries[:size]
+		response.HasMore = true
+		response.NextCursor = encodeCursor(offset + size)
+	}
+	return response, nil
 }

@@ -138,8 +138,10 @@ func (r *RedisTaskRepository) ReleaseTasks(ctx context.Context, workerID string)
 			continue
 		}
 
-		if task.WorkerID == workerID {
-			task.State = domain.Pending
+		if task.WorkerID == workerID && (task.State == domain.Running || task.State == domain.Scheduled) {
+			if err := task.UpdateState(domain.Pending); err != nil {
+				return err
+			}
 			task.WorkerID = ""
 			task.UpdatedAt = time.Now().UTC()
 
@@ -157,3 +159,47 @@ func (r *RedisTaskRepository) ReleaseTasks(ctx context.Context, workerID string)
 func (r *RedisTaskRepository) ListTasks(ctx context.Context, filter *domain.TaskFilter) ([]*domain.Task, error) {
 	return nil, fmt.Errorf("listing tasks is not supported with Redis storage yet; use Postgres for advanced filtering")
 }
+
+// RecoverTasks is only safe before a single server starts dispatching.
+func (r *RedisTaskRepository) RecoverTasks(ctx context.Context) error {
+	var cursor uint64
+	for {
+		keys, next, err := r.client.Scan(ctx, cursor, taskKeyPrefix+"*", 100).Result()
+		if err != nil {
+			return err
+		}
+		for _, key := range keys {
+			raw, err := r.client.Get(ctx, key).Bytes()
+			if err != nil {
+				return err
+			}
+			task, err := unmarshalTask(raw)
+			if err != nil {
+				return err
+			}
+			if task.State != domain.Running && task.State != domain.Scheduled {
+				continue
+			}
+			oldWorker := task.WorkerID
+			if err := task.UpdateState(domain.Pending); err != nil {
+				return err
+			}
+			task.WorkerID = ""
+			if err := r.Update(ctx, task); err != nil {
+				return err
+			}
+			if oldWorker != "" {
+				if err := r.client.SRem(ctx, workerTasksKey(oldWorker), task.ID).Err(); err != nil {
+					return err
+				}
+			}
+		}
+		cursor = next
+		if cursor == 0 {
+			return nil
+		}
+	}
+}
+
+func (r *RedisTaskRepository) Ping(ctx context.Context) error { return r.client.Ping(ctx).Err() }
+func (r *RedisTaskRepository) Close() error                   { return r.client.Close() }
