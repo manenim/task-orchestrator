@@ -31,6 +31,12 @@ func New(repo port.TaskRepository, logger port.Logger, wm *WorkerManager, publis
 }
 
 func (s *Orchestrator) SubmitTask(ctx context.Context, req *pb.SubmitTaskRequest) (*pb.SubmitTaskResponse, error) {
+	if req.MaxRetries < 0 || req.MaxRetries > 30 {
+		return nil, status.Error(codes.InvalidArgument, "max_retries must be between 0 and 30")
+	}
+	if req.TimeoutSeconds < 0 {
+		return nil, status.Error(codes.InvalidArgument, "timeout_seconds cannot be negative")
+	}
 	if req.Type == "" {
 		return nil, status.Error(codes.InvalidArgument, "Task type cannot be empty")
 	}
@@ -44,6 +50,7 @@ func (s *Orchestrator) SubmitTask(ctx context.Context, req *pb.SubmitTaskRequest
 	}
 
 	task := domain.NewTask(req.TaskId, req.ClientId, req.Type, req.Payload, runAt, req.TimeoutSeconds)
+	task.MaxRetries = int(req.MaxRetries)
 
 	if err := s.repo.Create(ctx, task); err != nil {
 		return nil, s.statusFromError(err)
@@ -68,7 +75,11 @@ func (s *Orchestrator) StreamTasks(req *pb.StreamTasksRequest, stream pb.Orchest
 		if err := s.workerManager.Remove(req.WorkerId); err != nil {
 			s.logger.Error("Failed to remove worker", err)
 		}
-		_ = s.repo.ReleaseTasks(context.Background(), req.WorkerId)
+		releaseCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := s.repo.ReleaseTasks(releaseCtx, req.WorkerId); err != nil {
+			s.logger.Error("Failed to release disconnected worker tasks", err)
+		}
 	}()
 
 	<-stream.Context().Done()
@@ -117,6 +128,9 @@ func (s *Orchestrator) CompleteTask(ctx context.Context, req *pb.CompleteTaskReq
 		return nil, s.statusFromError(err)
 	}
 
+	if req.WorkerId == "" || task.WorkerID != req.WorkerId {
+		return nil, status.Error(codes.FailedPrecondition, "task is not assigned to this worker")
+	}
 	previousState := task.State
 	eventType := orchestratorv1.TaskEventType_TASK_EVENT_TYPE_STATE_CHANGED
 	eventReason := "task completed"

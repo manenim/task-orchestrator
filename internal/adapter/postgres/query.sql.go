@@ -15,11 +15,11 @@ const createTask = `-- name: CreateTask :exec
 INSERT INTO tasks (
     id, client_id, task_type, payload, state, run_at, 
     worker_id, result, retry_count, max_retries, 
-    timeout_seconds, last_failed_at, created_at, updated_at
+    timeout_seconds, last_failed_at, created_at, updated_at, error_message, version
 ) VALUES (
     $1, $2, $3, $4, $5, $6, 
     $7, $8, $9, $10, 
-    $11, $12, $13, $14
+    $11, $12, $13, $14, $15, $16
 )
 `
 
@@ -38,6 +38,8 @@ type CreateTaskParams struct {
 	LastFailedAt   pgtype.Timestamptz
 	CreatedAt      pgtype.Timestamptz
 	UpdatedAt      pgtype.Timestamptz
+	ErrorMessage   string
+	Version        int32
 }
 
 func (q *Queries) CreateTask(ctx context.Context, arg CreateTaskParams) error {
@@ -56,12 +58,14 @@ func (q *Queries) CreateTask(ctx context.Context, arg CreateTaskParams) error {
 		arg.LastFailedAt,
 		arg.CreatedAt,
 		arg.UpdatedAt,
+		arg.ErrorMessage,
+		arg.Version,
 	)
 	return err
 }
 
 const getTask = `-- name: GetTask :one
-SELECT id, client_id, task_type, payload, state, run_at, worker_id, result, retry_count, max_retries, timeout_seconds, last_failed_at, created_at, updated_at FROM tasks
+SELECT id, client_id, task_type, payload, state, run_at, worker_id, result, retry_count, max_retries, timeout_seconds, last_failed_at, created_at, updated_at, error_message, version FROM tasks
 WHERE id = $1 LIMIT 1
 `
 
@@ -83,12 +87,14 @@ func (q *Queries) GetTask(ctx context.Context, id pgtype.UUID) (Task, error) {
 		&i.LastFailedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ErrorMessage,
+		&i.Version,
 	)
 	return i, err
 }
 
 const listEligibleTasks = `-- name: ListEligibleTasks :many
-SELECT id, client_id, task_type, payload, state, run_at, worker_id, result, retry_count, max_retries, timeout_seconds, last_failed_at, created_at, updated_at FROM tasks
+SELECT id, client_id, task_type, payload, state, run_at, worker_id, result, retry_count, max_retries, timeout_seconds, last_failed_at, created_at, updated_at, error_message, version FROM tasks
 WHERE state = 'PENDING'
   AND run_at <= $1
 ORDER BY run_at ASC
@@ -124,6 +130,8 @@ func (q *Queries) ListEligibleTasks(ctx context.Context, arg ListEligibleTasksPa
 			&i.LastFailedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.ErrorMessage,
+			&i.Version,
 		); err != nil {
 			return nil, err
 		}
@@ -140,6 +148,7 @@ UPDATE tasks
 SET 
     state = 'PENDING',
     worker_id = NULL,
+    version = version + 1,
     updated_at = NOW()
 WHERE worker_id = $1 
   AND state IN ('RUNNING', 'SCHEDULED')
@@ -159,7 +168,10 @@ SET
     retry_count = $5,
     last_failed_at = $6,
     run_at = $7,
-    updated_at = NOW()
+    updated_at = NOW(),
+ error_message = $8,
+ version = $9,
+ max_retries = $10
 WHERE id = $1
 `
 
@@ -171,6 +183,9 @@ type UpdateTaskParams struct {
 	RetryCount   int32
 	LastFailedAt pgtype.Timestamptz
 	RunAt        pgtype.Timestamptz
+	ErrorMessage string
+	Version      int32
+	MaxRetries   int32
 }
 
 func (q *Queries) UpdateTask(ctx context.Context, arg UpdateTaskParams) error {
@@ -182,6 +197,9 @@ func (q *Queries) UpdateTask(ctx context.Context, arg UpdateTaskParams) error {
 		arg.RetryCount,
 		arg.LastFailedAt,
 		arg.RunAt,
+		arg.ErrorMessage,
+		arg.Version,
+		arg.MaxRetries,
 	)
 	return err
 }

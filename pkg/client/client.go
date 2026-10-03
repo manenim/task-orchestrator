@@ -35,7 +35,7 @@ type SubmitRequest struct {
 	Payload        []byte    // Optional. Arbitrary data for the handler.
 	ClientID       string    // Optional. Overrides the client-level default.
 	RunAt          time.Time // Optional. Zero = schedule immediately.
-	MaxRetries     int32     // Optional. Default: server-side default (3).
+	MaxRetries     int32     // Automatic retry budget (0..30). Zero disables retries.
 	TimeoutSeconds int32     // Optional. Per-task timeout in seconds.
 }
 

@@ -2,7 +2,7 @@
 
 This runbook covers day-to-day operations for Task Orchestrator.
 
-It is written for local environments first, with production guidance where relevant.
+It covers a single server and disposable local examples. Production hardening and multi-server ownership remain future work.
 
 ## 1. Prerequisites
 
@@ -77,12 +77,10 @@ docker compose -f deploy/envoy/docker-compose.yaml up -d
 ## 4.1 gRPC service health
 
 ```bash
-grpcurl -plaintext localhost:50051 list
+grpcurl -plaintext -d '{"service":"readiness"}' localhost:50051 grpc.health.v1.Health/Check
 ```
 
-Expected services:
-- `api.v1.Orchestrator`
-- `orchestrator.v1.ControlPlaneService`
+Expected status: `SERVING`. The standard gRPC health service has `liveness` and `readiness` names. Readiness checks storage every two seconds with a one-second check timeout; liveness stays healthy during a storage outage to avoid restart storms. Reflection is enabled for local inspection.
 
 ## 4.2 Postgres health
 
@@ -109,7 +107,7 @@ curl -sSf http://localhost:9901/ready
 ## 5.1 Run tests before deploy
 
 ```bash
-go test ./... -count=1
+go test -race ./... -count=1
 ```
 
 ## 5.2 Run scenario clients
@@ -142,8 +140,9 @@ go run cmd/client/shutdowntest/main.go
 
 Server:
 1. send `SIGTERM` / `Ctrl+C`,
-2. server calls gRPC `GracefulStop`,
-3. background loops exit via context cancellation.
+2. health becomes `NOT_SERVING` and background loops stop via context cancellation,
+3. the server gives RPCs up to `SHUTDOWN_TIMEOUT` (default `10s`) to finish,
+4. it closes remaining streams when the deadline expires. Long-lived worker/event streams otherwise prevent `GracefulStop` from returning. Kubernetes uses a 20-second termination grace period.
 
 Worker:
 1. send `SIGTERM` / `Ctrl+C`,
@@ -215,13 +214,13 @@ Checks:
 2. look for `No worker available to dispatch task`,
 3. inspect task rows with `state='SCHEDULED'`.
 
-Current behavior note:
-- if dispatch occurs with no workers, tasks may remain `SCHEDULED` until manually corrected.
+Current behavior:
+- no-worker dispatch and stream send failures requeue tasks to `PENDING`,
+- queued snapshots are refreshed before dispatch so already-cancelled work is skipped,
+- worker disconnect releases its running/scheduled work,
+- startup recovers abandoned assignments before scheduling begins.
 
-Remediation options:
-1. bring workers online,
-2. manually reset affected tasks to `PENDING` in storage,
-3. restart components after correcting worker availability.
+Bring workers online and inspect storage errors if recovery does not progress. Do not start a second server against the same repository.
 
 ## 7.4 Symptom: `ListTasks` fails in Redis mode
 
@@ -233,13 +232,14 @@ Remediation:
 ## 7.5 Symptom: control-plane RPC returns `Unimplemented`
 
 Likely call to currently unimplemented methods:
-- `CancelTask`
 - `RetryTask`
-- `ListTaskLogs`
+- `CancelTask` with nonzero `expected_version`
+- `ListTaskLogs` outside Postgres mode
+- worker-plane `RegisterWorker` (the SDK registers by opening `StreamTasks`)
 
 Remediation:
-- use worker-plane `CancelTask` for cancellation,
-- use direct task updates/manual replay workflow for retries until API is implemented.
+- use unconditional cancellation through either plane,
+- replay finalized work under a new task ID only after checking side effects.
 
 ## 8. Backup and Recovery (Postgres)
 
@@ -254,6 +254,23 @@ Restore:
 ```bash
 psql 'postgres://user:password@localhost:5432/orchestrator?sslmode=disable' < orchestrator.sql
 ```
+
+## Recovery Guarantees and Limits
+
+Startup recovery resets all `SCHEDULED`/`RUNNING` tasks before accepting work. Run exactly one server; the Kubernetes Deployment uses `replicas: 1` and `Recreate`. Two servers can dispatch the same work and startup recovery can interfere with another live server.
+
+Execution is at least once: a worker may finish a side effect before the server receives its completion. Use idempotent handlers or a durable side-effect deduplication key. A completion from a different worker ID is rejected, but reconnecting with the same ID does not fence an old attempt. Task state updates are not atomic compare-and-swap; cancellation and completion can still race. Race-detector success addresses memory races, not these distributed correctness limits.
+
+Postgres migration adds `error_message` and `version` to existing databases. Reapply `go run ./cmd/migrate` before upgrading the server. Legacy versions default to `1`; they are not historical revision reconstructions. Events/logs are best-effort writes after state persistence, not a transactional outbox. Event streams are live only and slow subscribers may lose events. Redis durability depends on the external Redis persistence configuration; memory storage is lost on restart.
+
+## Failure Demonstrations
+
+- Run `TEST_DATABASE_URL=... TEST_REDIS_ADDR=... go test -race ./... -count=1` against disposable services. Missing variables skip backend integration tests; CI always supplies them.
+- `TestStreamDisconnectRequeuesAndReplacementCompletes` opens actual gRPC streams, disconnects a worker, reassigns its task, and verifies the replacement result.
+- `TestPostgresPersistenceAndRecovery` reopens storage through a fresh connection, verifies full task metadata and result, and resets abandoned running work.
+- `TestRedisReleasePreservesTerminalTasks` checks that disconnect cannot revive completed, failed, or cancelled tasks.
+- `TestServerHealthAndBoundedShutdown` starts a real server process and verifies health and exit with a live worker stream.
+- Follow [the Kubernetes demo](../deploy/kubernetes/README.md) for server restart and database outage/readiness recovery. The script verifies the same completed result after both disruptions.
 
 ## 9. Performance and Tuning Notes
 
@@ -293,6 +310,6 @@ go run cmd/server/main.go
 go run cmd/worker/main.go
 
 # Validation
-go test ./... -count=1
-grpcurl -plaintext localhost:50051 list
+go test -race ./... -count=1
+grpcurl -plaintext -d '{"service":"readiness"}' localhost:50051 grpc.health.v1.Health/Check
 ```

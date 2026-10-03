@@ -2,11 +2,11 @@
 INSERT INTO tasks (
     id, client_id, task_type, payload, state, run_at, 
     worker_id, result, retry_count, max_retries, 
-    timeout_seconds, last_failed_at, created_at, updated_at
+    timeout_seconds, last_failed_at, created_at, updated_at, error_message, version
 ) VALUES (
     $1, $2, $3, $4, $5, $6, 
     $7, $8, $9, $10, 
-    $11, $12, $13, $14
+    $11, $12, $13, $14, $15, $16
 );
 
 -- name: GetTask :one
@@ -22,7 +22,10 @@ SET
     retry_count = $5,
     last_failed_at = $6,
     run_at = $7,
-    updated_at = NOW()
+    updated_at = NOW(),
+ error_message = $8,
+ version = $9,
+ max_retries = $10
 WHERE id = $1;
 
 -- name: ListEligibleTasks :many
@@ -37,6 +40,7 @@ UPDATE tasks
 SET 
     state = 'PENDING',
     worker_id = NULL,
+    version = version + 1,
     updated_at = NOW()
 WHERE worker_id = $1 
   AND state IN ('RUNNING', 'SCHEDULED');

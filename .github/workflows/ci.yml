@@ -16,9 +16,31 @@ concurrency:
 
 jobs:
   build-test:
-    name: Go Vet + Test
+    name: Go Vet + Race + Storage Recovery
     runs-on: ubuntu-latest
 
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: orchestrator
+          POSTGRES_PASSWORD: test-only
+          POSTGRES_DB: orchestrator_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U orchestrator -d orchestrator_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgres://orchestrator:test-only@localhost:5432/orchestrator_test?sslmode=disable
+      TEST_REDIS_ADDR: localhost:6379
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -42,4 +64,30 @@ jobs:
         run: go vet ./...
 
       - name: Run tests
-        run: go test ./... -count=1
+        run: go test -race ./... -count=1
+
+  kubernetes-smoke:
+    name: Kubernetes Restart + Readiness
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Install kind
+        run: go install sigs.k8s.io/kind@v0.33.0
+      - name: Create disposable cluster
+        run: kind create cluster --name orchestrator --wait 90s
+      - name: Build and load application image
+        run: |
+          docker build -t task-orchestrator:dev .
+          kind load docker-image task-orchestrator:dev --name orchestrator
+      - name: Verify task flow and failure recovery
+        run: scripts/verify-kubernetes.sh
+      - name: Remove disposable cluster
+        if: always()
+        run: kind delete cluster --name orchestrator

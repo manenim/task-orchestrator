@@ -2,11 +2,13 @@ package postgres
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/manenim/task-orchestrator/internal/domain"
@@ -41,6 +43,8 @@ func (r *PostgresTaskRepository) Create(ctx context.Context, task *domain.Task) 
 		RetryCount:     int32(task.RetryCount),
 		MaxRetries:     int32(task.MaxRetries),
 		TimeoutSeconds: task.TimeoutSeconds,
+		ErrorMessage:   task.ErrorMessage,
+		Version:        int32(task.Version),
 		CreatedAt:      pgtype.Timestamptz{Time: task.CreatedAt, Valid: !task.CreatedAt.IsZero()},
 		UpdatedAt:      pgtype.Timestamptz{Time: task.UpdatedAt, Valid: !task.UpdatedAt.IsZero()},
 	}
@@ -57,6 +61,9 @@ func (r *PostgresTaskRepository) Create(ctx context.Context, task *domain.Task) 
 		params.LastFailedAt = pgtype.Timestamptz{Time: task.LastFailedAt, Valid: true}
 	}
 
+	if params.Payload == nil {
+		params.Payload = []byte{}
+	}
 	return r.queries.CreateTask(ctx, params)
 }
 
@@ -67,10 +74,12 @@ func (r *PostgresTaskRepository) Get(ctx context.Context, id string) (*domain.Ta
 	}
 
 	row, err := r.queries.GetTask(ctx, pgtype.UUID{Bytes: uuidBytes, Valid: true})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, domain.ErrTaskNotFound
+	}
 	if err != nil {
 		return nil, err
 	}
-
 	return mapToDomain(row), nil
 }
 
@@ -81,10 +90,13 @@ func (r *PostgresTaskRepository) Update(ctx context.Context, task *domain.Task) 
 	}
 
 	params := UpdateTaskParams{
-		ID:         pgtype.UUID{Bytes: id, Valid: true},
-		State:      string(task.State),
-		RetryCount: int32(task.RetryCount),
-		RunAt:      pgtype.Timestamptz{Time: task.RunAt, Valid: !task.RunAt.IsZero()},
+		ID:           pgtype.UUID{Bytes: id, Valid: true},
+		State:        string(task.State),
+		RetryCount:   int32(task.RetryCount),
+		ErrorMessage: task.ErrorMessage,
+		Version:      int32(task.Version),
+		MaxRetries:   int32(task.MaxRetries),
+		RunAt:        pgtype.Timestamptz{Time: task.RunAt, Valid: !task.RunAt.IsZero()},
 	}
 
 	if task.WorkerID != "" {
@@ -222,7 +234,9 @@ SELECT
 	timeout_seconds,
 	last_failed_at,
 	created_at,
-	updated_at
+	updated_at,
+	error_message,
+	version
 FROM tasks
 `
 	if len(where) > 0 {
@@ -252,6 +266,8 @@ FROM tasks
 	for rows.Next() {
 		var (
 			id, clientID, taskType, state, workerIDStr string
+			errorMessage                               string
+			version                                    int32
 			payload, result                            []byte
 			runAt, createdAt, updatedAt                time.Time
 			retryCount, maxRetries                     int
@@ -278,6 +294,8 @@ FROM tasks
 			&lastFailedAtPG,
 			&createdAt,
 			&updatedAt,
+			&errorMessage,
+			&version,
 		); err != nil {
 			return nil, fmt.Errorf("scan task row failed: %w", err)
 		}
@@ -306,10 +324,12 @@ FROM tasks
 			LastFailedAt:   lastFailedAt,
 			CreatedAt:      createdAt,
 			UpdatedAt:      updatedAt,
+			ErrorMessage:   errorMessage,
+			Version:        int(version),
 		}
 		tasks = append(tasks, task)
 	}
-	return tasks, nil
+	return tasks, rows.Err()
 }
 
 func mapToDomain(row Task) *domain.Task {
@@ -330,5 +350,13 @@ func mapToDomain(row Task) *domain.Task {
 		LastFailedAt:   row.LastFailedAt.Time,
 		CreatedAt:      row.CreatedAt.Time,
 		UpdatedAt:      row.UpdatedAt.Time,
+		ErrorMessage:   row.ErrorMessage,
+		Version:        int(row.Version),
 	}
+}
+
+// RecoverTasks requires exclusive ownership of the repository by this server.
+func (r *PostgresTaskRepository) RecoverTasks(ctx context.Context) error {
+	_, err := r.pool.Exec(ctx, `UPDATE tasks SET state='PENDING', worker_id=NULL, version=version+1, updated_at=NOW() WHERE state IN ('SCHEDULED','RUNNING')`)
+	return err
 }

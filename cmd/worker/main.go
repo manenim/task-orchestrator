@@ -17,7 +17,11 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	w, err := worker.New("localhost:50051",
+	serverAddr := os.Getenv("SERVER_ADDR")
+	if serverAddr == "" {
+		serverAddr = "localhost:50051"
+	}
+	w, err := worker.New(serverAddr,
 		worker.WithLogger(&stdLogger{}),
 	)
 	if err != nil {

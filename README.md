@@ -4,7 +4,7 @@
 [![CI](https://github.com/manenim/task-orchestrator/actions/workflows/ci.yml/badge.svg)](https://github.com/manenim/task-orchestrator/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-A distributed task orchestration system built with gRPC streaming.
+A Go task orchestration system built with gRPC streaming, with one server coordinating a remote worker pool.
 
 It lets you:
 - submit tasks from clients,
@@ -16,17 +16,20 @@ It lets you:
 
 ## Project Status
 
-This repository is functional and usable today, with a few API surface areas intentionally still in-progress.
+This repository is a working engineering project with tested local recovery paths. It is not a production-readiness or high-availability claim.
 
-Implemented and production-usable core paths:
+Implemented core paths:
 - Worker-plane RPCs: `SubmitTask`, `StreamTasks`, `CompleteTask`, `CancelTask`
 - Task scheduling and dispatch loop
 - Worker SDK with reconnect and graceful drain
 - Storage backends: Postgres, Redis, in-memory
 
 Partially implemented control-plane surface (see `docs/api-reference.md` for details):
-- Implemented: `ListTasks`, `GetTask`, `StreamTaskEvents`, `GetClusterStats`
-- Declared in proto but currently unimplemented server handlers: `CancelTask`, `RetryTask`, `ListTaskLogs`
+- Implemented: `ListTasks`, `GetTask`, `StreamTaskEvents`, `GetClusterStats`, unconditional `CancelTask`
+- Postgres only: `ListTaskLogs`
+- Explicitly unsupported: manual `RetryTask`, conditional cancellation (`expected_version`), event replay/resume, and multi-tenant isolation
+
+The server must run as **one replica**. Startup resets abandoned `SCHEDULED`/`RUNNING` assignments to `PENDING`, so handlers must tolerate repeated execution. Atomic task transitions, attempt fencing, and multi-server ownership are future work. See [recovery limits](docs/runbook.md#recovery-guarantees-and-limits).
 
 ## Why This Exists
 
@@ -147,6 +150,10 @@ go run cmd/worker/main.go
 go run cmd/client/loadtest/main.go
 ```
 
+## Kubernetes Demo
+
+[deploy/kubernetes/README.md](deploy/kubernetes/README.md) describes a disposable kind deployment with PostgreSQL persistence, migrations, probes, resource limits, task-flow checks, server restart, and a database outage demonstration. CI executes that deployment separately from the Go race and storage tests. It uses private cluster networking and is not a public production deployment.
+
 ## SDK Usage
 
 ### Worker SDK (`pkg/worker`)
@@ -225,7 +232,7 @@ func main() {
 }
 ```
 
-Important note: `SubmitRequest.MaxRetries` is present in API types, but current server implementation still applies the domain default (`3`) when creating a task.
+`SubmitRequest.MaxRetries` is honoured: `0` (including omission) disables automatic retries; valid values are `0..30`. Set it explicitly when retries are wanted. This changes the previous behavior, which ignored the field and always used `3`. Negative timeouts are rejected.
 
 ## Configuration
 
@@ -237,8 +244,9 @@ Server configuration is loaded from environment variables (with `.env` auto-disc
 | `STORAGE_DRIVER` | `postgres` | No | One of `postgres`, `redis`, `memory` |
 | `DATABASE_URL` | none | Yes when `STORAGE_DRIVER=postgres` | Postgres DSN |
 | `REDIS_ADDR` | none | Yes when `STORAGE_DRIVER=redis` | Redis address (`host:port`) |
-| `TENANT_ID` | `default` | No | Default tenant scope attached by control-plane |
-| `NAMESPACE_ID` | `default` | No | Default namespace scope attached by control-plane |
+| `TENANT_ID` | `default` | No | Default tenant label attached by control-plane |
+| `NAMESPACE_ID` | `default` | No | Default namespace label attached by control-plane |
+| `SHUTDOWN_TIMEOUT` | `10s` | No | Positive duration before remaining gRPC streams are forced closed |
 
 ## Storage Drivers
 
@@ -272,7 +280,7 @@ Caveats:
 ### Run tests
 
 ```bash
-go test ./... -count=1
+go test -race ./... -count=1
 ```
 
 ### Regenerate protobuf code
@@ -318,6 +326,7 @@ docs/                              # architecture, API, and runbook docs
 - [`docs/architecture.md`](docs/architecture.md) - internal component design, data flow, and lifecycle details
 - [`docs/api-reference.md`](docs/api-reference.md) - RPC-level reference with current implementation status
 - [`docs/runbook.md`](docs/runbook.md) - operational procedures and troubleshooting
+- [`docs/verification.md`](docs/verification.md) - commands, tested behavior, and evidence limits
 
 ## License
 

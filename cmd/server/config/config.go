@@ -4,17 +4,19 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/joho/godotenv"
 )
 
 type Config struct {
-	Port          string
-	StorageDriver string
-	DatabaseURL   string
-	RedisAddr     string
-	TenantID      string
-	NamespaceID   string
+	Port            string
+	StorageDriver   string
+	DatabaseURL     string
+	RedisAddr       string
+	TenantID        string
+	NamespaceID     string
+	ShutdownTimeout time.Duration
 }
 
 func Load() (*Config, error) {
@@ -31,6 +33,11 @@ func Load() (*Config, error) {
 		NamespaceID:   getEnv("NAMESPACE_ID", "default"),
 	}
 
+	timeout, err := time.ParseDuration(getEnv("SHUTDOWN_TIMEOUT", "10s"))
+	if err != nil || timeout <= 0 {
+		return nil, fmt.Errorf("SHUTDOWN_TIMEOUT must be a positive duration")
+	}
+	cfg.ShutdownTimeout = timeout
 	switch cfg.StorageDriver {
 	case "postgres":
 		if cfg.DatabaseURL == "" {
@@ -40,6 +47,9 @@ func Load() (*Config, error) {
 		if cfg.RedisAddr == "" {
 			return nil, fmt.Errorf("REDIS_ADDR is required when STORAGE_DRIVER is redis")
 		}
+	case "memory":
+	default:
+		return nil, fmt.Errorf("unsupported STORAGE_DRIVER: %s", cfg.StorageDriver)
 	}
 	return cfg, nil
 }

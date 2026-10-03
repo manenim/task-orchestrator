@@ -293,7 +293,8 @@ These tables back event streaming metadata and per-task operational logs.
 
 ### Server shutdown
 
-- server context cancellation triggers `GracefulStop`,
+- server context cancellation marks health not serving and triggers `GracefulStop`,
+- `SHUTDOWN_TIMEOUT` bounds long-lived RPC draining, then remaining streams are closed,
 - worker SDK drains in-flight handlers before stream close.
 
 ### Retry exhaustion
@@ -302,16 +303,16 @@ These tables back event streaming metadata and per-task operational logs.
 
 ## 10. Known Limitations (Current)
 
-1. Control-plane RPCs `CancelTask`, `RetryTask`, and `ListTaskLogs` are declared in proto but not implemented in server handlers yet.
-2. `SubmitTaskRequest.max_retries` is currently ignored by orchestrator task creation path (domain default `3` is applied).
-3. If dispatch is attempted with no active workers, task remains `SCHEDULED` and is not automatically returned to `PENDING`.
+1. Manual `RetryTask`, conditional cancellation, and worker-plane `RegisterWorker` remain explicitly unsupported. Unconditional control-plane cancellation and Postgres log listing are implemented.
+2. Task state updates do not provide atomic compare-and-swap or execution-attempt fencing. A different worker ID is rejected on completion, but reusing an ID does not fence old attempts.
+3. Exactly one server must own a repository. Startup recovers abandoned assignments; no-worker dispatch and send failures requeue to `PENDING`. This can repeat work, so handlers must be idempotent.
 4. Control-plane stream currently pushes live events only; request filters and resume positions are not yet enforced.
 5. Scope fields are metadata only today; storage-level tenant/namespace isolation is not implemented.
 
 ## 11. Suggested Next Architecture Improvements
 
-1. Implement full control-plane mutation and logs APIs to match proto surface.
-2. Propagate `max_retries` from submit request into persisted tasks.
-3. Add stuck-task recovery for `SCHEDULED` tasks without available workers.
+1. Add atomic task transitions and execution-attempt tokens before implementing safe manual retry.
+2. Add explicit multi-server task ownership and lease recovery before increasing server replicas.
+3. Persist state changes and their events through a transactional outbox.
 4. Add durable event replay and stream resume semantics.
 5. Add first-class tenant/namespace partitioning at repository layer.
